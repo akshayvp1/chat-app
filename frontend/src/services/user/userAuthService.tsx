@@ -1,73 +1,166 @@
 import axiosInstance from "../../utils/axiosInstance";
+import { getErrorMessage } from "../../utils/errorHandler";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+import type {
+  RegisterPayload,
+  RegisterResponse,
+  LoginPayload,
+  LoginResponse,
+  OtpVerifyPayload,
+  OtpResendPayload,
+  VerifyOtpResponse,
+  ForgotPasswordPayload,
+  ResetPasswordPayload
+} from "../../types/types";
 
-export interface RegisterPayload {
-  firstName: string;
-  lastName: string;
-  email: string;
-  phone: string;
-  password: string;
+const API_BASE_URL = "/user";
+
+type AuthResult<T> =
+  | {
+      success: true;
+      data: T;
+      message: string;
+    }
+  | {
+      success: false;
+      message: string;
+    };
+
+export const register = async (
+  payload: RegisterPayload
+): Promise<AuthResult<RegisterResponse>> => {
+  try {
+    const response = await axiosInstance.post<RegisterResponse>(
+      `${API_BASE_URL}/register`,
+      payload
+    );
+
+    return {
+      success: true,
+      data: response.data,
+      message: response.data.message,
+    };
+  } catch (error: unknown) {
+    return {
+      success: false,
+      message: getErrorMessage(
+        error,
+        "Registration failed. Please try again."
+      ),
+    };
+  }
+};
+
+export const login = async (
+  payload: LoginPayload
+): Promise<AuthResult<LoginResponse>> => {
+  try {
+    const response = await axiosInstance.post<LoginResponse>(
+      `${API_BASE_URL}/login`,
+      payload
+    );
+      
+    return {
+      success: true,
+      data: response.data,
+      message: "Login successful",
+    };
+  } catch (error: unknown) {
+    return {
+      success: false,
+      message: getErrorMessage(
+        error,
+        "Login failed. Please try again."
+      ),
+    };
+  }
+};
+
+
+
+
+async function verifyOtp(
+  payload: OtpVerifyPayload
+): Promise<AuthResult<VerifyOtpResponse>> {
+  try {
+    const response =
+      await axiosInstance.post<VerifyOtpResponse>(
+        `${API_BASE_URL}/verify-otp`,
+        payload
+      );
+
+    return {
+      success: true,
+      data: response.data,
+      message: response.data.message,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      message:
+        "OTP verification failed. Please try again.",
+    };
+  }
 }
 
-export interface RegisterResponse {
-  message: string;
-  user: {
-    id: string;
-    firstName: string;
-    lastName: string;
-    email: string;
-    phone: string;
-  };
+async function resendOtp(payload: OtpResendPayload): Promise<AuthResult<{ message: string }>> {
+  try {
+    const response = await axiosInstance.post<{ message: string }>(`${API_BASE_URL}/resend-otp`, payload);
+    return { success: true, data: response.data, message: response.data.message };
+  } catch (error) {
+    return {
+      success: false,
+      message:"Failed to resend OTP. Please try again.",
+    };
+  }
 }
 
-export interface LoginPayload {
-  username: string;
-  password: string;
+
+  async function forgotPassword(payload: ForgotPasswordPayload): Promise<AuthResult<{ message: string }>> {
+  try {
+    const response = await axiosInstance.post<{ message: string }>(`${API_BASE_URL}/forgot-password`, payload);
+    return { success: true, data: response.data, message: response.data.message };
+  } catch (error) {
+    return {
+      success: false,
+      message: "Failed to send reset link. Please try again.",
+    };
+  }
 }
 
-export interface LoginResponse {
-  accessToken: string;
-  refreshToken: string;
-  user: {
-    id: string;
-    username: string;
-    email: string;
-  };
+
+async function resetPassword(
+  payload: ResetPasswordPayload
+): Promise<AuthResult<{ message: string }>> {
+  try {
+    const response = await axiosInstance.post(
+      `${API_BASE_URL}/reset-password/${payload.token}`,
+      {
+        password: payload.password,
+      }
+    );
+
+    return {
+      success: true,
+      data: response.data,
+      message: response.data.message,
+    };
+  } catch {
+    return {
+      success: false,
+      message: "Failed to reset password. Please try again.",
+    };
+  }
 }
 
-// ─── Auth Service ─────────────────────────────────────────────────────────────
 
 const authService = {
-
-  // Register
-  register: async (payload: RegisterPayload): Promise<RegisterResponse> => {
-    const { data } = await axiosInstance.post<RegisterResponse>("/user/register", payload);
-    return data;
-  },
-
-  // Login
-  login: async (payload: LoginPayload): Promise<LoginResponse> => {
-    const { data } = await axiosInstance.post<LoginResponse>("/user/login", payload);
-    // Store tokens
-    localStorage.setItem("accessToken", data.accessToken);
-    localStorage.setItem("refreshToken", data.refreshToken);
-    return data;
-  },
-
-  // Logout
-  logout: (): void => {
-    localStorage.removeItem("accessToken");
-    localStorage.removeItem("refreshToken");
-    window.location.href = "/login";
-  },
-
-  // Get current logged-in user
-  getMe: async () => {
-    const { data } = await axiosInstance.get("/auth/me");
-    return data;
-  },
-
+  register,
+  login,
+  verifyOtp,
+   resendOtp,
+   forgotPassword,
+   resetPassword
 };
 
 export default authService;

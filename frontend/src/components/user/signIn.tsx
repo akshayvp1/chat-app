@@ -1,258 +1,368 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Eye, EyeOff, User, Mail, Phone } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent } from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import authService from "../../services/user/userAuthService";
-import type { RegisterPayload, LoginPayload } from "../../services/user/userAuthService";
+import { useAppDispatch, useAppSelector } from "../../redux/hooks";
+import {
+  loginSuccess,
+  storePendingUser,
+} from "../../redux/slices/authSlice";
 
-type Mode = "login" | "register";
-interface FieldError { [key: string]: string }
+import type {
+  AuthMode,
+  ValidationErrors,
+  InputFieldProps,
+  PasswordFieldProps,
+  RegisterPayload,
+  LoginPayload,
+} from "../../types/types";
 
-function validateEmail(e: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+const BRAND_COLOR = "#5b7cfa";
+
+function isValidEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
-function validatePhone(p: string): boolean {
-  return /^\+?[\d\s\-(). ]{7,15}$/.test(p);
+
+function isValidPhone(phone: string): boolean {
+  return /^\+?[\d\s\-(). ]{7,15}$/.test(phone);
 }
 
-interface FieldProps {
-  label: string; type: string; icon: string; value: string;
-  error?: string; onChange: (v: string) => void; flex?: boolean;
-}
-
-function Field({ label, type, icon, value, error, onChange, flex }: FieldProps) {
+function InputField({ label, type, icon, value, error, onChange }: InputFieldProps) {
+  const Icon = icon === "user" ? User : icon === "mail" ? Mail : Phone;
   return (
-    <div style={flex ? { flex: 1 } : {}}>
-      <label style={S.label}>{label}</label>
-      <div style={{ position: "relative" }}>
-        <input
-          type={type} value={value}
+    <div className="space-y-1.5">
+      <Label className="text-xs font-semibold text-gray-600">{label}</Label>
+      <div className="relative">
+        <Input
+          type={type}
+          value={value}
           onChange={(e: React.ChangeEvent<HTMLInputElement>) => onChange(e.target.value)}
-          style={{ ...S.input, ...(error ? S.inputErr : {}) }}
+          className={`pr-9 bg-slate-50 ${error ? "border-red-500 bg-red-50" : ""}`}
         />
-        <i className={`ti ${icon}`} style={S.inpIcon} aria-hidden="true" />
+        <Icon className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
       </div>
-      {error && <p style={S.errText}>{error}</p>}
+      {error && <p className="text-xs text-red-500">{error}</p>}
     </div>
   );
 }
 
-interface PwFieldProps {
-  label: string; value: string; error?: string;
-  onChange: (v: string) => void; flex?: boolean;
-}
-
-function PwField({ label, value, error, onChange, flex }: PwFieldProps) {
-  const [show, setShow] = useState<boolean>(false);
+function PasswordField({ label, value, error, onChange }: PasswordFieldProps) {
+  const [showPassword, setShowPassword] = useState(false);
   return (
-    <div style={flex ? { flex: 1 } : {}}>
-      <label style={S.label}>{label}</label>
-      <div style={{ position: "relative" }}>
-        <input
-          type={show ? "text" : "password"} value={value}
+    <div className="space-y-1.5">
+      <Label className="text-xs font-semibold text-gray-600">{label}</Label>
+      <div className="relative">
+        <Input
+          type={showPassword ? "text" : "password"}
+          value={value}
           onChange={(e: React.ChangeEvent<HTMLInputElement>) => onChange(e.target.value)}
-          style={{ ...S.input, ...(error ? S.inputErr : {}) }}
+          className={`pr-9 bg-slate-50 ${error ? "border-red-500 bg-red-50" : ""}`}
         />
-        <button style={S.eyeBtn} onClick={() => setShow((p) => !p)} aria-label="Toggle password" type="button">
-          <i className={show ? "ti ti-eye-off" : "ti ti-eye"} style={{ fontSize: 16 }} />
+        <button
+          type="button"
+          onClick={() => setShowPassword((prev) => !prev)}
+          aria-label="Toggle password visibility"
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+        >
+          {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
         </button>
       </div>
-      {error && <p style={S.errText}>{error}</p>}
+      {error && <p className="text-xs text-red-500">{error}</p>}
     </div>
   );
 }
 
 export default function SignIn() {
   const navigate = useNavigate();
+  const dispatch = useAppDispatch();
+  const user = useAppSelector((state) => state.auth.user);
 
-  const [mode, setMode] = useState<Mode>("login");
-  const [lUser, setLUser] = useState<string>("");
-  const [lPw, setLPw] = useState<string>("");
-  const [fn, setFn] = useState<string>("");
-  const [ln, setLn] = useState<string>("");
-  const [rEmail, setREmail] = useState<string>("");
-  const [phone, setPhone] = useState<string>("");
-  const [rPw, setRPw] = useState<string>("");
-  const [cpw, setCpw] = useState<string>("");
-  const [errors, setErrors] = useState<FieldError>({});
-  const [done, setDone] = useState<boolean>(false);
-  const [loading, setLoading] = useState<boolean>(false);
-  const [apiError, setApiError] = useState<string>("");
+  const [mode, setMode] = useState<AuthMode>("login");
 
-  function switchMode(): void {
-    setMode((m) => (m === "login" ? "register" : "login"));
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+
+  const [registerName, setRegisterName] = useState("");
+  const [registerEmail, setRegisterEmail] = useState("");
+  const [registerPhone, setRegisterPhone] = useState("");
+  const [registerPassword, setRegisterPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+
+  const [errors, setErrors] = useState<ValidationErrors>({});
+  const [isSuccess, setIsSuccess] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [apiError, setApiError] = useState("");
+
+  function toggleMode() {
+    setMode((prev) => (prev === "login" ? "register" : "login"));
     setErrors({});
-    setDone(false);
+    setIsSuccess(false);
     setApiError("");
   }
 
-  async function submitLogin(): Promise<void> {
-    const e: FieldError = {};
-    if (!lUser.trim()) e.lUser = "Username is required.";
-    if (!lPw) e.lPw = "Password is required.";
-    setErrors(e);
-    if (Object.keys(e).length) return;
+  async function handleLoginSubmit() {
+    const newErrors: ValidationErrors = {};
+    if (!loginEmail.trim()) newErrors.loginEmail = "Email is required.";
+    else if (!isValidEmail(loginEmail)) newErrors.loginEmail = "Invalid email.";
+    if (!loginPassword) newErrors.loginPassword = "Password is required.";
+    setErrors(newErrors);
+    if (Object.keys(newErrors).length) return;
 
-    try {
-      setLoading(true);
-      setApiError("");
-      const payload: LoginPayload = { username: lUser, password: lPw };
-      await authService.login(payload);
-      setDone(true);
-      // Navigate to dashboard after login
-      setTimeout(() => navigate("/dashboard"), 1200);
-    } catch (err: any) {
-      setApiError(err?.response?.data?.message || "Login failed. Please try again.");
-    } finally {
-      setLoading(false);
+    setIsLoading(true);
+    setApiError("");
+
+    const payload: LoginPayload = { email: loginEmail, password: loginPassword };
+    const result = await authService.login(payload);
+
+    if (result.success) {
+      // localStorage.setItem("accessToken", result.data.accessToken);
+      // localStorage.setItem("refreshToken", result.data.refreshToken);
+
+      dispatch(
+        loginSuccess({
+          user: result.data.user,
+        })
+      );
+
+      navigate("/chat");
+    } else {
+      setApiError(result.message);
     }
+
+    setIsLoading(false);
   }
 
-  async function submitRegister(): Promise<void> {
-    const e: FieldError = {};
-    if (!fn.trim()) e.fn = "Required.";
-    if (!ln.trim()) e.ln = "Required.";
-    if (!rEmail) e.rEmail = "Required.";
-    else if (!validateEmail(rEmail)) e.rEmail = "Invalid email.";
-    if (!phone) e.phone = "Required.";
-    else if (!validatePhone(phone)) e.phone = "Invalid number.";
-    if (!rPw) e.rPw = "Required.";
-    else if (rPw.length < 8) e.rPw = "Min. 8 characters.";
-    if (!cpw) e.cpw = "Required.";
-    else if (rPw !== cpw) e.cpw = "Passwords do not match.";
-    setErrors(e);
-    if (Object.keys(e).length) return;
+  async function handleRegisterSubmit() {
+    const newErrors: ValidationErrors = {};
+    if (!registerName.trim()) newErrors.registerName = "Required.";
+    if (!registerEmail) newErrors.registerEmail = "Required.";
+    else if (!isValidEmail(registerEmail)) newErrors.registerEmail = "Invalid email.";
+    if (!registerPhone) newErrors.registerPhone = "Required.";
+    else if (!isValidPhone(registerPhone)) newErrors.registerPhone = "Invalid number.";
+    if (!registerPassword) newErrors.registerPassword = "Required.";
+    else if (registerPassword.length < 8) newErrors.registerPassword = "Min. 8 characters.";
+    if (!confirmPassword) newErrors.confirmPassword = "Required.";
+    else if (registerPassword !== confirmPassword) newErrors.confirmPassword = "Passwords do not match.";
+    setErrors(newErrors);
+    if (Object.keys(newErrors).length) return;
 
-    try {
-      setLoading(true);
-      setApiError("");
-      const payload: RegisterPayload = {
-        firstName: fn,
-        lastName: ln,
-        email: rEmail,
-        phone,
-        password: rPw,
-      };
-      await authService.register(payload);
-      setDone(true);
-    } catch (err: any) {
-      setApiError(err?.response?.data?.message || "Registration failed. Please try again.");
-    } finally {
-      setLoading(false);
-    }
+    setIsLoading(true);
+    setApiError("");
+
+    const payload: RegisterPayload = {
+      name: registerName,
+      email: registerEmail,
+      phone: registerPhone,
+      password: registerPassword,
+    };
+    const result = await authService.register(payload);
+
+   if (result.success && result.data?.user) {
+  dispatch(
+    storePendingUser(result.data.user)
+  );
+
+  navigate("/verify-otp");
+} else {
+  setApiError(result.message);
+}
+
+    setIsLoading(false);
   }
 
-  const isLogin = mode === "login";
+  function resetSuccessState() {
+    setIsSuccess(false);
+    setErrors({});
+    setApiError("");
+  }
+
+  const isLoginMode = mode === "login";
 
   return (
-    <div style={S.wrap}>
-      <div style={S.card}>
+    <div className="flex items-center justify-center min-h-screen bg-indigo-50 p-4 sm:p-8 font-sans">
+      <Card className="flex w-full max-w-3xl min-h-[460px] rounded-3xl overflow-hidden shadow-2xl shadow-indigo-200/60 p-0 flex-col sm:flex-row">
 
-        {/* Blue panel */}
-        <div style={S.panelBlue}>
-          <div style={S.blueCircle1} />
-          <div style={S.blueCircle2} />
-          <p style={S.blueTitle}>{isLogin ? "Hello, Welcome!" : "Welcome Back!"}</p>
-          <p style={S.blueSub}>{isLogin ? "Don't have an account?" : "Already have an account?"}</p>
-          <button style={S.blueBtn} onClick={switchMode} type="button">
-            {isLogin ? "Register" : "Login"}
-          </button>
+        {/* Left brand panel */}
+        <div
+          className="relative flex flex-col items-center justify-center text-center px-8 py-10 sm:w-[42%] shrink-0 overflow-hidden"
+          style={{ backgroundColor: BRAND_COLOR }}
+        >
+          <div className="absolute -top-16 -right-16 w-44 h-44 rounded-full bg-white/10" />
+          <div className="absolute -bottom-12 -left-12 w-40 h-40 rounded-full bg-white/10" />
+
+          <p className="relative z-10 text-xl font-extrabold text-white mb-2">
+            {isLoginMode ? "Hello, Welcome!" : "Welcome Back!"}
+          </p>
+          <p className="relative z-10 text-sm text-white/80 mb-6">
+            {isLoginMode ? "Don't have an account?" : "Already have an account?"}
+          </p>
+          <Button
+            variant="outline"
+            onClick={toggleMode}
+            className="relative z-10 border-2 border-white bg-transparent text-white hover:bg-white hover:text-indigo-600 rounded-full px-7"
+          >
+            {isLoginMode ? "Register" : "Login"}
+          </Button>
         </div>
 
-        {/* Form panel */}
-        <div style={S.panelForm}>
-          {done ? (
-            <div style={S.success}>
-              <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="#5b7cfa" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        {/* Right form panel */}
+        <CardContent className="flex-1 flex flex-col justify-center p-8 sm:p-9">
+          {isSuccess ? (
+            <div className="flex flex-col items-center gap-3 text-center py-2">
+              <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke={BRAND_COLOR} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
                 <polyline points="22 4 12 14.01 9 11.01" />
               </svg>
-              <p style={S.succTitle}>{isLogin ? "Welcome back!" : "Account created!"}</p>
-              <p style={S.succSub}>{isLogin ? "Redirecting to dashboard..." : "Your account has been registered."}</p>
-              <button style={S.succBtn} type="button" onClick={() => { setDone(false); setErrors({}); setApiError(""); }}>Back</button>
+              <p className="text-lg font-extrabold text-slate-900">
+                {isLoginMode ? "Welcome back!" : "Account created!"}
+              </p>
+              <p className="text-sm text-gray-500">
+                {isLoginMode ? "Redirecting to dashboard..." : "Your account has been registered."}
+              </p>
+              <Button
+                onClick={resetSuccessState}
+                className="mt-2 rounded-full px-7"
+                style={{ backgroundColor: BRAND_COLOR }}
+              >
+                Back
+              </Button>
             </div>
-          ) : isLogin ? (
+          ) : isLoginMode ? (
             <>
-              <p style={S.formTitle}>Login</p>
-              <div style={S.form}>
-                <Field label="Username" type="text" icon="ti-user" value={lUser} error={errors.lUser} onChange={setLUser} />
-                <PwField label="Password" value={lPw} error={errors.lPw} onChange={setLPw} />
-                {apiError && <p style={S.apiErr}>{apiError}</p>}
-                <button style={S.forgot} type="button" onClick={() => navigate("/forgot-password")}>Forgot password?</button>
-                <button style={{ ...S.submit, opacity: loading ? 0.7 : 1 }} type="button" onClick={submitLogin} disabled={loading}>
-                  {loading ? "Logging in..." : "Login"}
+              <p className="text-xl font-extrabold text-slate-900 mb-5 text-center">Login</p>
+              <div className="flex flex-col gap-3">
+                <InputField
+                  label="Email"
+                  type="email"
+                  icon="mail"
+                  value={loginEmail}
+                  error={errors.loginEmail}
+                  onChange={setLoginEmail}
+                />
+                <PasswordField
+                  label="Password"
+                  value={loginPassword}
+                  error={errors.loginPassword}
+                  onChange={setLoginPassword}
+                />
+                {apiError && (
+                  <Alert variant="destructive" className="py-2">
+                    <AlertDescription className="text-xs text-center">{apiError}</AlertDescription>
+                  </Alert>
+                )}
+                <button
+                  type="button"
+                  onClick={() => navigate("/forgot-password")}
+                  className="self-end -mt-1.5 text-xs font-medium hover:underline"
+                  style={{ color: BRAND_COLOR }}
+                >
+                  Forgot password?
                 </button>
-                <div style={S.divider}>
-                  <div style={S.divLine} />
-                  <span style={S.divText}>or login with social platforms</span>
-                  <div style={S.divLine} />
+                <Button
+                  onClick={handleLoginSubmit}
+                  disabled={isLoading}
+                  className="w-full rounded-full font-bold"
+                  style={{ backgroundColor: BRAND_COLOR, opacity: isLoading ? 0.7 : 1 }}
+                >
+                  {isLoading ? "Logging in..." : "Login"}
+                </Button>
+
+                <div className="flex items-center gap-2.5 my-1">
+                  <div className="flex-1 h-px bg-slate-200" />
+                  <span className="text-[11px] text-slate-400 whitespace-nowrap">
+                    or login with social platforms
+                  </span>
+                  <div className="flex-1 h-px bg-slate-200" />
                 </div>
-                <div style={S.socials}>
-                  {["G", "f", "⊕", "in"].map((s) => (
-                    <button key={s} style={S.socBtn} type="button">{s}</button>
+
+                <div className="flex justify-center gap-2.5">
+                  {["G", "f", "⊕", "in"].map((label) => (
+                    <Button
+                      key={label}
+                      variant="outline"
+                      className="w-9 h-9 p-0 rounded-lg text-sm font-bold text-slate-600"
+                    >
+                      {label}
+                    </Button>
                   ))}
                 </div>
               </div>
             </>
           ) : (
             <>
-              <p style={S.formTitle}>Registration</p>
-              <div style={S.form}>
-                <div style={S.row}>
-                  <Field label="First Name" type="text" icon="ti-user" value={fn} error={errors.fn} onChange={setFn} flex />
-                  <Field label="Last Name" type="text" icon="ti-user" value={ln} error={errors.ln} onChange={setLn} flex />
+              <p className="text-xl font-extrabold text-slate-900 mb-5 text-center">Registration</p>
+              <div className="flex flex-col gap-3">
+                <InputField
+                  label="Name"
+                  type="text"
+                  icon="user"
+                  value={registerName}
+                  error={errors.registerName}
+                  onChange={setRegisterName}
+                />
+                <div className="flex flex-col sm:flex-row gap-2.5">
+                  <div className="flex-1">
+                    <InputField
+                      label="Email"
+                      type="email"
+                      icon="mail"
+                      value={registerEmail}
+                      error={errors.registerEmail}
+                      onChange={setRegisterEmail}
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <InputField
+                      label="Phone"
+                      type="tel"
+                      icon="phone"
+                      value={registerPhone}
+                      error={errors.registerPhone}
+                      onChange={setRegisterPhone}
+                    />
+                  </div>
                 </div>
-                <div style={S.row}>
-                  <Field label="Email" type="email" icon="ti-mail" value={rEmail} error={errors.rEmail} onChange={setREmail} flex />
-                  <Field label="Phone" type="tel" icon="ti-phone" value={phone} error={errors.phone} onChange={setPhone} flex />
+                <div className="flex flex-col sm:flex-row gap-2.5">
+                  <div className="flex-1">
+                    <PasswordField
+                      label="Password"
+                      value={registerPassword}
+                      error={errors.registerPassword}
+                      onChange={setRegisterPassword}
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <PasswordField
+                      label="Confirm Password"
+                      value={confirmPassword}
+                      error={errors.confirmPassword}
+                      onChange={setConfirmPassword}
+                    />
+                  </div>
                 </div>
-                <div style={S.row}>
-                  <PwField label="Password" value={rPw} error={errors.rPw} onChange={setRPw} flex />
-                  <PwField label="Confirm Password" value={cpw} error={errors.cpw} onChange={setCpw} flex />
-                </div>
-                {apiError && <p style={S.apiErr}>{apiError}</p>}
-                <button style={{ ...S.submit, opacity: loading ? 0.7 : 1 }} type="button" onClick={submitRegister} disabled={loading}>
-                  {loading ? "Registering..." : "Register"}
-                </button>
+                {apiError && (
+                  <Alert variant="destructive" className="py-2">
+                    <AlertDescription className="text-xs text-center">{apiError}</AlertDescription>
+                  </Alert>
+                )}
+                <Button
+                  onClick={handleRegisterSubmit}
+                  disabled={isLoading}
+                  className="w-full rounded-full font-bold"
+                  style={{ backgroundColor: BRAND_COLOR, opacity: isLoading ? 0.7 : 1 }}
+                >
+                  {isLoading ? "Registering..." : "Register"}
+                </Button>
               </div>
             </>
           )}
-        </div>
-
-      </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
-
-const BLUE = "#5b7cfa";
-
-const S: Record<string, React.CSSProperties> = {
-  wrap: { display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", background: "#eef2ff", padding: "32px 16px", fontFamily: "'Inter','Segoe UI',system-ui,sans-serif" },
-  card: { display: "flex", width: "100%", maxWidth: 720, minHeight: 460, borderRadius: 24, overflow: "hidden", boxShadow: "0 12px 48px rgba(80,100,220,.18)" },
-  panelBlue: { background: BLUE, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "40px 32px", width: "42%", textAlign: "center", flexShrink: 0, position: "relative", overflow: "hidden" },
-  blueCircle1: { position: "absolute", top: -60, right: -60, width: 180, height: 180, background: "rgba(255,255,255,.10)", borderRadius: "50%" },
-  blueCircle2: { position: "absolute", bottom: -50, left: -50, width: 160, height: 160, background: "rgba(255,255,255,.08)", borderRadius: "50%" },
-  blueTitle: { fontSize: 22, fontWeight: 800, color: "#fff", marginBottom: 8, position: "relative", zIndex: 1 },
-  blueSub: { fontSize: 13, color: "rgba(255,255,255,.8)", marginBottom: 24, position: "relative", zIndex: 1 },
-  blueBtn: { border: "2px solid #fff", background: "transparent", color: "#fff", padding: "9px 28px", borderRadius: 20, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", position: "relative", zIndex: 1 },
-  panelForm: { background: "#fff", flex: 1, padding: "36px 32px", display: "flex", flexDirection: "column", justifyContent: "center" },
-  formTitle: { fontSize: 22, fontWeight: 800, color: "#1a1a2e", marginBottom: 20, textAlign: "center" },
-  form: { display: "flex", flexDirection: "column", gap: 12 },
-  row: { display: "flex", gap: 10 },
-  label: { display: "block", fontSize: 12, fontWeight: 600, color: "#555", marginBottom: 5 },
-  input: { width: "100%", padding: "9px 36px 9px 12px", border: "1.5px solid #e0e4ef", borderRadius: 10, fontSize: 13, color: "#1a1a2e", outline: "none", background: "#f7f9ff", fontFamily: "inherit", boxSizing: "border-box" as const },
-  inputErr: { borderColor: "#ef4444", background: "#fff5f5" },
-  inpIcon: { position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", color: "#aab0cc", fontSize: 16, pointerEvents: "none" as const },
-  eyeBtn: { position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#aab0cc", padding: 0, display: "flex", alignItems: "center" },
-  errText: { fontSize: 11, color: "#ef4444", marginTop: 3 },
-  apiErr: { fontSize: 12, color: "#ef4444", textAlign: "center", background: "#fff5f5", padding: "8px 12px", borderRadius: 8, border: "1px solid #fecaca" },
-  forgot: { background: "none", border: "none", cursor: "pointer", fontSize: 12, color: BLUE, fontWeight: 500, padding: 0, fontFamily: "inherit", alignSelf: "flex-end", marginTop: -6 },
-  submit: { width: "100%", padding: 11, background: BLUE, color: "#fff", border: "none", borderRadius: 20, fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", marginTop: 2 },
-  divider: { display: "flex", alignItems: "center", gap: 10, margin: "4px 0" },
-  divLine: { flex: 1, height: 1, background: "#e0e4ef" },
-  divText: { fontSize: 11, color: "#aab0cc", whiteSpace: "nowrap" as const },
-  socials: { display: "flex", justifyContent: "center", gap: 10 },
-  socBtn: { width: 36, height: 36, border: "1.5px solid #e0e4ef", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", background: "#fff", cursor: "pointer", fontSize: 13, color: "#555", fontWeight: 700, fontFamily: "inherit" },
-  success: { display: "flex", flexDirection: "column", alignItems: "center", gap: 10, padding: "10px 0", textAlign: "center" },
-  succTitle: { fontSize: 18, fontWeight: 800, color: "#1a1a2e" },
-  succSub: { fontSize: 13, color: "#888" },
-  succBtn: { marginTop: 8, padding: "9px 26px", background: BLUE, color: "#fff", border: "none", borderRadius: 20, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" },
-};
