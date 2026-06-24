@@ -1,9 +1,9 @@
-import {Document} from "mongoose";
-
-export interface IUser extends Document{
-    name:string,
-    email:string,
-    phone:string,
-    password:string,
-    profile?:string
+export interface IUser {
+  _id: string;
+  name: string;
+  email: string;
+  phone: string;
+  password: string;
+  profile?: string;
+  lastSeen?: Date | null;
 }

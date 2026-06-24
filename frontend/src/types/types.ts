@@ -57,8 +57,6 @@ export interface ApiResponse<T> {
   data?: T;
 }
 
-
-
 export interface OtpVerifyPayload {
   email: string;
   otp: string;
@@ -84,12 +82,18 @@ export interface ResetPasswordPayload {
   password: string;
 }
 
-export interface Message {
-  id: string;
+// ─── Chat ─────────────────────────────────────────────────────────────────────
+
+export interface ChatMessage {
+  _id: string;
+  tempId?: string;
+  senderId: string;
+  receiverId: string;
   text: string;
-  sender: "me" | "other";
-  time: string;
   seen: boolean;
+  createdAt: string;
+  updatedAt?: string;
+  status?: "sending" | "sent" | "error";
 }
 
 export interface Contact {
@@ -106,9 +110,18 @@ export interface UserList {
   _id: string;
   name: string;
   email: string;
+  lastSeen?: string | null;
 }
-
 
 export interface LogoutResponse {
   message: string;
+}
+
+// kept for backward compat if used elsewhere
+export interface Message {
+  id: string;
+  text: string;
+  sender: "me" | "other";
+  time: string;
+  seen: boolean;
 }

@@ -9,47 +9,48 @@ import type {
 const axiosInstance: AxiosInstance = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || "http://localhost:3000/api",
   timeout: 10000,
-  withCredentials: true, // send/receive httpOnly cookies on every request
+  withCredentials: true, // IMPORTANT for cookies
   headers: {
     "Content-Type": "application/json",
   },
 });
 
-// ─── Response Interceptor ──────────────────────────────────────────────────
+// ─── RESPONSE INTERCEPTOR ─────────────────────────────
 axiosInstance.interceptors.response.use(
   (response: AxiosResponse) => {
     return response;
   },
   async (error: AxiosError) => {
-    const originalRequest = error.config as InternalAxiosRequestConfig & {
-      _retry?: boolean;
-    };
+    const originalRequest = error.config as
+      | (InternalAxiosRequestConfig & { _retry?: boolean })
+      | undefined;
+
+    if (!originalRequest) {
+      return Promise.reject(error);
+    }
 
     const url = originalRequest.url || "";
 
-    const skipUrls = [
-      "/user/check",
-      "/user/refresh-token",
-      "/user/login",
-      "/user/logout",
-    ];
+    const skipUrls = ["/user/login", "/user/logout", "/user/refresh-token"];
 
+    const isSkipUrl = skipUrls.some((item) => url.includes(item));
+
+    // ❗ only handle 401 for non-skip requests
     if (
       error.response?.status === 401 &&
       !originalRequest._retry &&
-      !skipUrls.some((item) => url.includes(item))
+      !isSkipUrl
     ) {
       originalRequest._retry = true;
 
       try {
-        await axios.post(
-          `${import.meta.env.VITE_API_BASE_URL}/user/refresh-token`,
-          {},
-          { withCredentials: true },
-        );
+        // ✅ refresh token call (IMPORTANT: same instance)
+        await axiosInstance.post("/user/refresh-token");
 
+        // retry original request
         return axiosInstance(originalRequest);
       } catch (refreshError) {
+        // refresh failed → logout user
         window.location.href = "/login";
         return Promise.reject(refreshError);
       }
@@ -58,4 +59,5 @@ axiosInstance.interceptors.response.use(
     return Promise.reject(error);
   },
 );
+
 export default axiosInstance;

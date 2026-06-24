@@ -1,30 +1,41 @@
 import "reflect-metadata";
 import dotenv from "dotenv";
 dotenv.config();
+
 import express from "express";
 import cors from "cors";
 import mongoose from "mongoose";
 import morgan from "morgan";
 import cookieParser from "cookie-parser";
+import http from "http";
+import { Server } from "socket.io";
 
 import "./config/container";
 import router from "./routes/router";
 import redisClient from "./config/redis";
+import { initializeSocket } from "./socket/socket";
 
 const app = express();
+const server = http.createServer(app);
+
+const io = new Server(server, {
+  cors: {
+    origin: process.env.CLIENT_URL,
+    credentials: true,
+  },
+});
+
+initializeSocket(io);
+
 const PORT = process.env.PORT || 3000;
 const MONGO_URI = process.env.MONGO_URI;
 
 async function startServer() {
   try {
-    // Validate Env
     if (!MONGO_URI) {
       throw new Error("MONGO_URI is missing in .env");
     }
 
-    // ------------------------
-    // 🔐 GLOBAL MIDDLEWARES
-    // ------------------------
     app.use(
       cors({
         origin: process.env.CLIENT_URL,
@@ -37,9 +48,6 @@ async function startServer() {
     app.use(cookieParser());
     app.use(morgan("dev"));
 
-    // ------------------------
-    // DB CONNECTIONS
-    // ------------------------
     await mongoose.connect(MONGO_URI);
     console.log("✅ MongoDB Connected");
 
@@ -48,18 +56,12 @@ async function startServer() {
       console.log("✅ Redis Connected");
     }
 
-    // ------------------------
-    // ROUTES
-    // ------------------------
     app.use("/api", router);
 
-    // ------------------------
-    // START SERVER
-    // ------------------------
-    app.listen(PORT, () => {
+    server.listen(PORT, () => {
       console.log(`🚀 Server running on http://localhost:${PORT}`);
+      console.log(`🔌 Socket.IO running`);
     });
-
   } catch (error) {
     console.error("❌ Server Startup Error:", error);
     process.exit(1);
