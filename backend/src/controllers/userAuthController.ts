@@ -1,11 +1,7 @@
 import { Request, Response } from "express";
 import { inject, injectable } from "tsyringe";
-import { IUserAuthController } from "../controllers/interface/IUserAuthController";
+import { IUserAuthController,ResetPasswordParams } from "../controllers/interface/IUserAuthController";
 import UserAuthService from "../services/userAuthService";
-
-interface ResetPasswordParams {
-  token: string;
-}
 
 @injectable()
 class UserAuthController implements IUserAuthController {

@@ -125,3 +125,34 @@ export interface Message {
   time: string;
   seen: boolean;
 }
+
+
+
+
+export interface GroupMember {
+  _id: string;
+  name: string;
+  email: string;
+}
+
+export interface Group {
+  _id: string;
+  name: string;
+  description: string;
+  admin: string;
+  members: GroupMember[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GroupMessage {
+  _id: string;
+  tempId?: string;
+  groupId: string;
+  senderId: string;
+  senderName: string;
+  text: string;
+  seenBy: string[];
+  createdAt: string;
+  status?: "sending" | "sent" | "error";
+}

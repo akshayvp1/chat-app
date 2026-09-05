@@ -5,12 +5,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import authService from "../../services/user/userAuthService";
 import type { OtpVerifyPayload, OtpResendPayload } from "../../types/types";
- import { useAppDispatch, useAppSelector } from "../../redux/hooks";
-import {
-  loginSuccess,
-  clearPendingUser,
-} from "../../redux/slices/authSlice";
-
+import { useAppDispatch, useAppSelector } from "../../redux/hooks";
+import { loginSuccess, clearPendingUser } from "../../redux/slices/authSlice";
 
 const BRAND_COLOR = "#5b7cfa";
 const OTP_LENGTH = 6;
@@ -20,12 +16,9 @@ export default function Otp() {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
 
-  const pendingUser = useAppSelector(
-    (state) => state.auth.pendingUser
-  );
+  const pendingUser = useAppSelector((state) => state.auth.pendingUser);
 
-const email = pendingUser?.email || "";
-
+  const email = pendingUser?.email || "";
 
   const [digits, setDigits] = useState<string[]>(Array(OTP_LENGTH).fill(""));
   const [error, setError] = useState("");
@@ -56,7 +49,10 @@ const email = pendingUser?.email || "";
     }
   }
 
-  function handleKeyDown(index: number, e: React.KeyboardEvent<HTMLInputElement>) {
+  function handleKeyDown(
+    index: number,
+    e: React.KeyboardEvent<HTMLInputElement>,
+  ) {
     if (e.key === "Backspace" && !digits[index] && index > 0) {
       inputRefs.current[index - 1]?.focus();
     }
@@ -64,7 +60,10 @@ const email = pendingUser?.email || "";
 
   function handlePaste(e: React.ClipboardEvent<HTMLInputElement>) {
     e.preventDefault();
-    const pasted = e.clipboardData.getData("text").replace(/[^0-9]/g, "").slice(0, OTP_LENGTH);
+    const pasted = e.clipboardData
+      .getData("text")
+      .replace(/[^0-9]/g, "")
+      .slice(0, OTP_LENGTH);
     if (!pasted) return;
 
     const newDigits = Array(OTP_LENGTH).fill("");
@@ -76,49 +75,48 @@ const email = pendingUser?.email || "";
   }
 
   async function handleVerify() {
-  const otp = digits.join("");
+    const otp = digits.join("");
 
-  if (otp.length < OTP_LENGTH) {
-    setError("Please enter the complete code.");
-    return;
-  }
-
-  setIsLoading(true);
-  setApiError("");
-  setError("");
-
-  try {
-    const payload: OtpVerifyPayload = {
-      email,
-      otp,
-    };
-
-    const result =
-      await authService.verifyOtp(payload);
-
-    if (result.success) {
-      dispatch(
-        loginSuccess({
-          user: result.data.user,
-        })
-      );
-
-      dispatch(clearPendingUser());
-
-      setIsSuccess(true);
-
-      setTimeout(() => {
-        navigate("/chat");
-      }, 1500);
-    } else {
-      setApiError(result.message);
+    if (otp.length < OTP_LENGTH) {
+      setError("Please enter the complete code.");
+      return;
     }
-  } catch (error) {
-    setApiError("OTP Verification Failed");
-  } finally {
-    setIsLoading(false);
+
+    setIsLoading(true);
+    setApiError("");
+    setError("");
+
+    try {
+      const payload: OtpVerifyPayload = {
+        email,
+        otp,
+      };
+
+      const result = await authService.verifyOtp(payload);
+
+      if (result.success) {
+        dispatch(
+          loginSuccess({
+            user: result.data.user,
+          }),
+        );
+
+        dispatch(clearPendingUser());
+
+        setIsSuccess(true);
+
+        setTimeout(() => {
+          navigate("/chat", { replace: true });
+        }, 1500);
+      } else {
+        setApiError(result.message);
+      }
+    } catch (error) {
+      setApiError("OTP Verification Failed");
+    } finally {
+      setIsLoading(false);
+    }
   }
-}
 
   async function handleResend() {
     setIsResending(true);
@@ -144,7 +142,16 @@ const email = pendingUser?.email || "";
         <CardContent className="p-8 sm:p-9">
           {isSuccess ? (
             <div className="flex flex-col items-center gap-3 text-center py-2">
-              <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke={BRAND_COLOR} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg
+                width="42"
+                height="42"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke={BRAND_COLOR}
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
                 <polyline points="22 4 12 14.01 9 11.01" />
               </svg>
@@ -153,17 +160,23 @@ const email = pendingUser?.email || "";
             </div>
           ) : (
             <>
-              <p className="text-xl font-extrabold text-slate-900 mb-2 text-center">Verify your email</p>
+              <p className="text-xl font-extrabold text-slate-900 mb-2 text-center">
+                Verify your email
+              </p>
               <p className="text-sm text-gray-500 mb-6 text-center">
                 Enter the {OTP_LENGTH}-digit code sent to{" "}
-                <span className="font-semibold text-slate-700">{email || "your email"}</span>
+                <span className="font-semibold text-slate-700">
+                  {email || "your email"}
+                </span>
               </p>
 
               <div className="flex justify-center gap-2 mb-4">
                 {digits.map((digit, index) => (
                   <input
                     key={index}
-                    ref={(el) => { inputRefs.current[index] = el; }}
+                    ref={(el) => {
+                      inputRefs.current[index] = el;
+                    }}
                     type="text"
                     inputMode="numeric"
                     maxLength={1}
@@ -178,11 +191,15 @@ const email = pendingUser?.email || "";
                 ))}
               </div>
 
-              {error && <p className="text-xs text-red-500 text-center mb-2">{error}</p>}
+              {error && (
+                <p className="text-xs text-red-500 text-center mb-2">{error}</p>
+              )}
 
               {apiError && (
                 <Alert variant="destructive" className="py-2 mb-3">
-                  <AlertDescription className="text-xs text-center">{apiError}</AlertDescription>
+                  <AlertDescription className="text-xs text-center">
+                    {apiError}
+                  </AlertDescription>
                 </Alert>
               )}
 
@@ -190,7 +207,10 @@ const email = pendingUser?.email || "";
                 onClick={handleVerify}
                 disabled={isLoading}
                 className="w-full rounded-full font-bold"
-                style={{ backgroundColor: BRAND_COLOR, opacity: isLoading ? 0.7 : 1 }}
+                style={{
+                  backgroundColor: BRAND_COLOR,
+                  opacity: isLoading ? 0.7 : 1,
+                }}
               >
                 {isLoading ? "Verifying..." : "Verify"}
               </Button>

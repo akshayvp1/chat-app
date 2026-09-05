@@ -8,4 +8,5 @@ export interface IMessage {
   seen: boolean;
   createdAt: Date;
   updatedAt: Date;
+  expiresAt?: Date;
 }
