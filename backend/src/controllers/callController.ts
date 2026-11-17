@@ -4,12 +4,13 @@ import { ICallService } from "../services/interface/ICallService";
 
 @injectable()
 export default class CallController {
-  constructor(@inject("ICallService") private callService: ICallService) {}
+  constructor(@inject("CallService") private callService: ICallService) {}
 
   getHistory = async (req: Request, res: Response) => {
     try {
-      // Adjust this to however your auth middleware attaches the user
-      const userId = (req as any).user?.id ?? (req as any).userId;
+      
+      const userId = req.user?.userId;
+     
 
       if (!userId) {
         return res.status(401).json({ success: false, message: "Unauthorized" });

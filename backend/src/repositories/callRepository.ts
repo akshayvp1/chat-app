@@ -1,5 +1,5 @@
 import { injectable } from "tsyringe";
-import { ICallRepository } from "../repositories/interface/ICallRepository";
+import { ICallRepository } from "./interface/ICallRepository";
 import { ICallLog, CallType, CallStatus } from "../interfaces/ICallLog";
 import CallLog from "../models/callLogModel";
 

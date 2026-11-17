@@ -1,7 +1,7 @@
-import mongoose, { Schema } from "mongoose";
+import { Schema, model } from "mongoose";
 import { ICallLog } from "../interfaces/ICallLog";
 
-const CallLogSchema = new Schema<ICallLog>(
+const callLogSchema = new Schema<ICallLog>(
   {
     callerId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     receiverId: { type: Schema.Types.ObjectId, ref: "User", required: true },
@@ -11,11 +11,11 @@ const CallLogSchema = new Schema<ICallLog>(
       enum: ["ongoing", "completed", "missed", "rejected"],
       default: "ongoing",
     },
-    startedAt: { type: Date, default: Date.now },
+    startedAt: { type: Date, required: true },
     endedAt: { type: Date },
-    duration: { type: Number },
+    duration: { type: Number, default: 0 },
   },
   { timestamps: true }
 );
 
-export default mongoose.model<ICallLog>("CallLog", CallLogSchema);
+export default model<ICallLog>("CallLog", callLogSchema);

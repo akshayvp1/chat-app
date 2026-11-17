@@ -1,6 +1,6 @@
 import { injectable, inject } from "tsyringe";
 import { Model } from "mongoose";
-import { IMessage } from "../interfaces/IMessage";
+import { IMessage, ICallInfo } from "../interfaces/IMessage";
 import { IChatRepository } from "../repositories/interface/IChatRepository";
 
 @injectable()
@@ -11,7 +11,16 @@ class ChatRepository implements IChatRepository {
   ) {}
 
   async saveMessage(senderId: string, receiverId: string, text: string): Promise<IMessage> {
-    return await this.messageModel.create({ senderId, receiverId, text });
+    return await this.messageModel.create({ senderId, receiverId, text, type: "text" });
+  }
+
+  async saveCallMessage(senderId: string, receiverId: string, call: ICallInfo): Promise<IMessage> {
+    return await this.messageModel.create({
+      senderId,
+      receiverId,
+      type: "call",
+      call,
+    });
   }
 
   async getMessages(userA: string, userB: string): Promise<IMessage[]> {

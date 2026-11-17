@@ -1,7 +1,3 @@
-// GroupChat.tsx
-// Full group chat area — mirrors Chat.tsx structure but uses group socket events,
-// groupMessages from Redux, and shows sender name on each message.
-
 import React, { useState, useRef, useEffect } from "react";
 import {
   Send,
@@ -25,6 +21,7 @@ import {
 import type { Group, GroupMessage } from "../../types/types";
 import groupService from "@/services/user/groupService";
 import { socket } from "@/socket/socket";
+import type { useGroupCall } from "../../hooks/useGroupCall";
 
 const BRAND_COLOR = "#5b7cfa";
 
@@ -52,7 +49,6 @@ function Avatar({
   );
 }
 
-// Generate a consistent color per sender so each member has a unique bubble color
 function getSenderColor(senderId: string): string {
   const colors = [
     "#e05c7a", "#e07a5f", "#3d405b", "#81b29a",
@@ -65,15 +61,48 @@ function getSenderColor(senderId: string): string {
   return colors[Math.abs(hash) % colors.length];
 }
 
+function GroupCallLogBubble({ message }: { message: GroupMessage }) {
+  const call = message.call!;
+  const isMissed = call.status === "missed";
+  const Icon = call.callType === "video" ? Video : Phone;
+  const m = Math.floor(call.duration / 60);
+  const s = call.duration % 60;
+
+  const label = isMissed
+    ? "Missed group call"
+    : `${call.callType === "video" ? "Video" : "Voice"} call · ${m}:${s
+        .toString()
+        .padStart(2, "0")} · ${call.participantCount} joined`;
+
+  return (
+    <div className="flex justify-center">
+      <div className="flex items-center gap-2 px-3 py-2 rounded-2xl bg-white shadow-sm border border-slate-100">
+        <Icon className="h-4 w-4" style={{ color: isMissed ? "#ef4444" : BRAND_COLOR }} />
+        <span className={`text-xs font-medium ${isMissed ? "text-red-500" : "text-slate-700"}`}>
+          {label}
+        </span>
+        <span className="text-[10px] text-gray-400">
+          {new Date(message.createdAt).toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          })}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 interface GroupChatProps {
   selectedGroup: Group;
   onBack: () => void;
+  groupCall: ReturnType<typeof useGroupCall>;
 }
 
-export default function GroupChat({ selectedGroup, onBack }: GroupChatProps) {
+export default function GroupChat({ selectedGroup, onBack, groupCall }: GroupChatProps) {
   const dispatch = useAppDispatch();
   const currentUserId = useAppSelector((s) => s.auth.user?._id ?? "");
   const currentUserName = useAppSelector((s) => s.auth.user?.name ?? "");
+  console.log("currentUserId", currentUserId,"name", currentUserName);
   const groupMessages = useAppSelector((s) => s.group.groupMessages);
 
   const [newMessage, setNewMessage] = useState("");
@@ -91,7 +120,6 @@ export default function GroupChat({ selectedGroup, onBack }: GroupChatProps) {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [groupMessages]);
 
-  // ── Fetch messages when group changes ────────────────────────────────────────
   useEffect(() => {
     if (!selectedGroup) return;
     async function fetchMessages() {
@@ -107,13 +135,17 @@ export default function GroupChat({ selectedGroup, onBack }: GroupChatProps) {
     fetchMessages();
   }, [selectedGroup._id, dispatch]);
 
-  // ── Socket: join group room + listen for group events ────────────────────────
   useEffect(() => {
     if (!currentUserId || !selectedGroup) return;
 
     socket.emit("join_groups", [selectedGroup._id]);
 
+    // Clear any typing state left over from a previous group/mount so a
+    // stray "X is typing..." can never survive a switch or a refresh.
+    setTypingUsers(new Map());
+
     function onReceiveGroupMessage(payload: GroupMessage) {
+      if (payload.groupId !== selectedGroupRef.current?._id) return;
       dispatch(addGroupMessage({ ...payload, status: "sent" }));
     }
 
@@ -125,7 +157,22 @@ export default function GroupChat({ selectedGroup, onBack }: GroupChatProps) {
       dispatch(markGroupMessageError(tempId));
     }
 
-    function onGroupTyping({ from, fromName }: { from: string; fromName: string; groupId: string }) {
+    function onGroupTyping({
+      from,
+      fromName,
+      groupId,
+    }: {
+      from: string;
+      fromName: string;
+      groupId: string;
+    }) {
+      // Only react to typing for the group that's actually open. Without
+      // this check, an event meant for a different group (or a leftover
+      // event from a listener that hasn't fully unsubscribed yet) can
+      // show up here and get stuck, since its matching stop_typing may
+      // never reach this listener.
+      if (groupId !== selectedGroupRef.current?._id) return;
+
       setTypingUsers((prev) => {
         const next = new Map(prev);
         next.set(from, fromName);
@@ -133,7 +180,15 @@ export default function GroupChat({ selectedGroup, onBack }: GroupChatProps) {
       });
     }
 
-    function onGroupStopTyping({ from }: { from: string; groupId: string }) {
+    function onGroupStopTyping({
+      from,
+      groupId,
+    }: {
+      from: string;
+      groupId: string;
+    }) {
+      if (groupId !== selectedGroupRef.current?._id) return;
+
       setTypingUsers((prev) => {
         const next = new Map(prev);
         next.delete(from);
@@ -156,12 +211,10 @@ export default function GroupChat({ selectedGroup, onBack }: GroupChatProps) {
     };
   }, [currentUserId, selectedGroup._id, dispatch]);
 
-  // ── Send message ─────────────────────────────────────────────────────────────
   function sendMessage() {
     if (!newMessage.trim() || !currentUserId) return;
 
     const tempId = `temp_${Date.now()}`;
-
     const optimistic: GroupMessage = {
       _id: tempId,
       tempId,
@@ -169,6 +222,7 @@ export default function GroupChat({ selectedGroup, onBack }: GroupChatProps) {
       senderId: currentUserId,
       senderName: currentUserName,
       text: newMessage.trim(),
+      type: "text",
       seenBy: [currentUserId],
       createdAt: new Date().toISOString(),
       status: "sending",
@@ -186,7 +240,6 @@ export default function GroupChat({ selectedGroup, onBack }: GroupChatProps) {
     });
   }
 
-  // ── Typing indicator ─────────────────────────────────────────────────────────
   function handleInputChange(e: React.ChangeEvent<HTMLInputElement>) {
     setNewMessage(e.target.value);
     if (!currentUserId) return;
@@ -211,6 +264,14 @@ export default function GroupChat({ selectedGroup, onBack }: GroupChatProps) {
       e.preventDefault();
       sendMessage();
     }
+  }
+
+  function handleStartAudioCall() {
+    groupCall.startCall(selectedGroup._id, "audio");
+  }
+
+  function handleStartVideoCall() {
+    groupCall.startCall(selectedGroup._id, "video");
   }
 
   const typingList = Array.from(typingUsers.values()).filter(Boolean);
@@ -255,10 +316,24 @@ export default function GroupChat({ selectedGroup, onBack }: GroupChatProps) {
         </div>
 
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" className="text-gray-400 hover:text-slate-700">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-gray-400 hover:text-slate-700"
+            onClick={handleStartAudioCall}
+            disabled={groupCall.status !== "idle"}
+            title="Audio call"
+          >
             <Phone className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="icon" className="text-gray-400 hover:text-slate-700">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-gray-400 hover:text-slate-700"
+            onClick={handleStartVideoCall}
+            disabled={groupCall.status !== "idle"}
+            title="Video call"
+          >
             <Video className="h-4 w-4" />
           </Button>
           <Button variant="ghost" size="icon" className="text-gray-400 hover:text-slate-700">
@@ -271,6 +346,10 @@ export default function GroupChat({ selectedGroup, onBack }: GroupChatProps) {
       <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-3">
         {groupMessages.length > 0 ? (
           groupMessages.map((message) => {
+            if (message.type === "call" && message.call) {
+              return <GroupCallLogBubble key={message._id} message={message} />;
+            }
+
             const isMe = message.senderId === currentUserId;
             const senderColor = getSenderColor(message.senderId);
 
@@ -297,7 +376,6 @@ export default function GroupChat({ selectedGroup, onBack }: GroupChatProps) {
                   } ${message.status === "error" ? "opacity-50" : ""}`}
                   style={isMe ? { backgroundColor: BRAND_COLOR } : {}}
                 >
-                  {/* Show sender name in group messages for others */}
                   {!isMe && (
                     <p
                       className="text-[11px] font-semibold mb-1"

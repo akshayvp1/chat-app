@@ -1,4 +1,4 @@
-import { ICallLog, CallType, CallStatus } from "./ICallLog";
+import { ICallLog, CallType, CallStatus } from "../../interfaces/ICallLog";
 
 export interface ICallService {
   startCall(callerId: string, receiverId: string, type: CallType): Promise<ICallLog>;

@@ -84,12 +84,22 @@ export interface ResetPasswordPayload {
 
 // ─── Chat ─────────────────────────────────────────────────────────────────────
 
+export type MessageKind = "text" | "call";
+
+export interface CallInfo {
+  callType: "audio" | "video";
+  status: "completed" | "missed" | "rejected";
+  duration: number;
+}
+
 export interface ChatMessage {
   _id: string;
   tempId?: string;
   senderId: string;
   receiverId: string;
   text: string;
+  type?: MessageKind;
+  call?: CallInfo;
   seen: boolean;
   createdAt: string;
   updatedAt?: string;
@@ -126,8 +136,7 @@ export interface Message {
   seen: boolean;
 }
 
-
-
+// ─── Groups ───────────────────────────────────────────────────────────────────
 
 export interface GroupMember {
   _id: string;
@@ -152,6 +161,28 @@ export interface GroupMessage {
   senderId: string;
   senderName: string;
   text: string;
+  seenBy: string[];
+  createdAt: string;
+  status?: "sending" | "sent" | "error";
+}
+export type GroupMessageKind = "text" | "call";
+
+export interface GroupCallInfo {
+  callType: "audio" | "video";
+  status: "completed" | "missed";
+  duration: number;
+  participantCount: number;
+}
+
+export interface GroupMessage {
+  _id: string;
+  tempId?: string;
+  groupId: string;
+  senderId: string;
+  senderName: string;
+  text: string;
+  type?: GroupMessageKind;
+  call?: GroupCallInfo;
   seenBy: string[];
   createdAt: string;
   status?: "sending" | "sent" | "error";

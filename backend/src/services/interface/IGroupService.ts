@@ -1,5 +1,5 @@
 import { IGroup } from "../../interfaces/IGroup";
-import { IGroupMessage } from "../../interfaces/IGroupMessage";
+import { IGroupCallInfo, IGroupMessage } from "../../interfaces/IGroupMessage";
 
 export interface IGroupService {
   createGroup(name: string, description: string, adminId: string, memberIds: string[]): Promise<IGroup>;
@@ -10,4 +10,9 @@ export interface IGroupService {
   saveGroupMessage(groupId: string, senderId: string, text: string): Promise<IGroupMessage>;
   getGroupMessages(groupId: string): Promise<IGroupMessage[]>;
   markGroupMessagesSeen(messageIds: string[], userId: string): Promise<void>;
+  saveGroupCallMessage(
+  groupId: string,
+  senderId: string,
+  call: IGroupCallInfo
+): Promise<IGroupMessage>;
 }
