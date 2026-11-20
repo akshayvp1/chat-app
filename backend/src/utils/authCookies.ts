@@ -1,4 +1,4 @@
-import { Response } from "express";
+import { Response, type CookieOptions } from "express";
 import {
   getAccessTokenMaxAgeMs,
   getRefreshTokenMaxAgeMs,
@@ -12,11 +12,15 @@ const REFRESH_COOKIE = "refreshToken";
  * the TTL that produced the token guarantees the cookie can never outlive
  * (or under-live) the JWT inside it.
  */
-const baseOptions = () => ({
-  httpOnly: true,
-  secure: process.env.NODE_ENV === "production",
-  sameSite: "lax" as const,
-});
+const baseOptions = (): CookieOptions => {
+  const isProduction = process.env.NODE_ENV === "production";
+
+  return {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? "none" : "lax",
+  };
+};
 
 export const setAccessTokenCookie = (res: Response, token: string): void => {
   res.cookie(ACCESS_COOKIE, token, {
