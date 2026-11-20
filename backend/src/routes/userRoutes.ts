@@ -1,4 +1,4 @@
-import express from "express";
+import express, { type NextFunction, type Request, type Response } from "express";
 import {container} from "tsyringe"
 import UserAuthController from "../controllers/userAuthController";
 import { authMiddleware } from "../middleware/authMiddleware";
@@ -19,33 +19,37 @@ user.post("/reset-password/:token",userAuthController.resetPassword);
 user.get("/users-list",authMiddleware,userAuthController.getUsers);
 user.put("/profile", authMiddleware, userAuthController.updateProfile);
 user.post("/logout", userAuthController.logout);
-user.get("/check", authMiddleware, async (req, res, next) => {
-  try {
-    const userId = req.user?.userId;
+user.get(
+  "/check",
+  authMiddleware,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const userId = req.user?.userId;
 
-    if (!userId) {
-      return res.status(401).json({
-        success: false,
-        message: "Unauthorized",
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: "Unauthorized",
+        });
+      }
+
+      const currentUser = await User.findById(userId).select("-password");
+
+      if (!currentUser) {
+        return res.status(401).json({
+          success: false,
+          message: "Unauthorized",
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        user: currentUser,
       });
+    } catch (error) {
+      return next(error);
     }
-
-    const currentUser = await User.findById(userId).select("-password");
-
-    if (!currentUser) {
-      return res.status(401).json({
-        success: false,
-        message: "Unauthorized",
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      user: currentUser,
-    });
-  } catch (error) {
-    return next(error);
   }
-});
+);
 
 export default user;

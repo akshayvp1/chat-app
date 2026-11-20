@@ -21,12 +21,16 @@ export function createUploadMiddleware(intent: UploadIntent): RequestHandler {
       fields: 20,
       parts: maxFiles + 20,
     },
-    fileFilter: (_req, file, callback) => {
+    fileFilter: (
+      _req: Request,
+      file: Express.Multer.File,
+      callback: multer.FileFilterCallback
+    ) => {
       try {
         resolveAttachmentResourceType(file.mimetype, intent);
         callback(null, true);
       } catch (error) {
-        callback(error as Error);
+        callback(error instanceof Error ? error : new Error(String(error)));
       }
     },
   });
