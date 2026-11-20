@@ -5,6 +5,8 @@ export interface User {
   name: string;
   email: string;
   phone: string;
+  profile?: string;
+  bio?: string;
 }
 
 export interface ValidationErrors {
@@ -17,6 +19,7 @@ export interface InputFieldProps {
   icon: "user" | "mail" | "phone";
   value: string;
   error?: string;
+  maxLength?: number;
   onChange: (value: string) => void;
 }
 
@@ -24,6 +27,7 @@ export interface PasswordFieldProps {
   label: string;
   value: string;
   error?: string;
+  maxLength?: number;
   onChange: (value: string) => void;
 }
 
@@ -51,14 +55,6 @@ export interface LoginResponse {
   user: User;
 }
 
-export interface ApiResponse<T> {
-  success: boolean;
-  message: string;
-  data?: T;
-}
-
-
-
 export interface OtpVerifyPayload {
   email: string;
   otp: string;
@@ -84,31 +80,107 @@ export interface ResetPasswordPayload {
   password: string;
 }
 
-export interface Message {
-  id: string;
-  text: string;
-  sender: "me" | "other";
-  time: string;
-  seen: boolean;
+// ─── Chat ─────────────────────────────────────────────────────────────────────
+
+export type MessageKind = "text" | "call";
+
+export interface CallInfo {
+  callType: "audio" | "video";
+  status: "completed" | "missed" | "rejected";
+  duration: number;
 }
 
-export interface Contact {
-  id: string;
-  name: string;
-  avatar: string;
-  lastMessage: string;
-  time: string;
-  unread: number;
-  online: boolean;
+export type MessageDeliveryStatus =
+  | "sending"
+  | "sent"
+  | "delivered"
+  | "read"
+  | "error";
+
+export type UploadIntent = "message" | "profile";
+
+export type AttachmentResourceType = "image" | "video" | "audio" | "raw";
+
+export interface MessageAttachment {
+  url: string;
+  publicId: string;
+  resourceType: AttachmentResourceType;
+  mimeType: string;
+  fileName: string;
+  size: number;
+  format?: string;
+  width?: number;
+  height?: number;
+  duration?: number;
+}
+
+export interface ProfileUpdateResponse {
+  success: boolean;
+  user?: User;
+}
+
+export interface ChatMessage {
+  _id: string;
+  tempId?: string;
+  senderId: string;
+  receiverId: string;
+  text: string;
+  type?: MessageKind;
+  call?: CallInfo;
+  attachments?: MessageAttachment[];
+  seen: boolean;
+  createdAt: string;
+  updatedAt?: string;
+  status?: MessageDeliveryStatus;
 }
 
 export interface UserList {
   _id: string;
   name: string;
   email: string;
+  profile?: string;
+  lastSeen?: string | null;
 }
 
+// ─── Groups ───────────────────────────────────────────────────────────────────
 
-export interface LogoutResponse {
-  message: string;
+export interface GroupMember {
+  _id: string;
+  name: string;
+  email: string;
+  profile?: string;
+}
+
+export interface Group {
+  _id: string;
+  name: string;
+  description: string;
+  admin: string;
+  members: GroupMember[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type GroupMessageKind = "text" | "call";
+
+export interface GroupCallInfo {
+  callType: "audio" | "video";
+  status: "completed" | "missed";
+  duration: number;
+  participantCount: number;
+}
+
+export interface GroupMessage {
+  _id: string;
+  tempId?: string;
+  groupId: string;
+  senderId: string;
+  senderName: string;
+  text: string;
+  type?: GroupMessageKind;
+  call?: GroupCallInfo;
+  attachments?: MessageAttachment[];
+  seenBy: string[];
+  createdAt: string;
+  status?: MessageDeliveryStatus;
 }

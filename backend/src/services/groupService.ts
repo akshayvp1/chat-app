@@ -1,0 +1,64 @@
+import { injectable, inject } from "tsyringe";
+import { IGroupService } from "./interface/IGroupService";
+import { IGroupRepository } from "../repositories/interface/IGroupRepository";
+import { IGroup } from "../interfaces/IGroup";
+import { IGroupMessage, IGroupCallInfo } from "../interfaces/IGroupMessage";
+import { IAttachment } from "../interfaces/IAttachment";
+
+@injectable()
+class GroupService implements IGroupService {
+  constructor(
+    @inject("GroupRepository") private groupRepository: IGroupRepository
+  ) {}
+
+  async createGroup(name: string, description: string, adminId: string, memberIds: string[]): Promise<IGroup> {
+    return await this.groupRepository.createGroup(name, description, adminId, memberIds);
+  }
+
+  async getGroupsForUser(userId: string): Promise<IGroup[]> {
+    return await this.groupRepository.getGroupsForUser(userId);
+  }
+
+  async getGroupById(groupId: string): Promise<IGroup | null> {
+    return await this.groupRepository.getGroupById(groupId);
+  }
+
+  async addMember(groupId: string, userId: string): Promise<void> {
+    await this.groupRepository.addMember(groupId, userId);
+  }
+
+  async removeMember(groupId: string, userId: string): Promise<void> {
+    await this.groupRepository.removeMember(groupId, userId);
+  }
+
+  async saveGroupMessage(
+    groupId: string,
+    senderId: string,
+    text: string,
+    attachments?: IAttachment[]
+  ): Promise<IGroupMessage> {
+    return await this.groupRepository.saveGroupMessage(groupId, senderId, text, attachments);
+  }
+
+  async saveGroupCallMessage(
+    groupId: string,
+    senderId: string,
+    call: IGroupCallInfo
+  ): Promise<IGroupMessage> {
+    return await this.groupRepository.saveGroupCallMessage(groupId, senderId, call);
+  }
+
+  async getGroupMessages(groupId: string): Promise<IGroupMessage[]> {
+    return await this.groupRepository.getGroupMessages(groupId);
+  }
+
+  async markGroupMessagesSeen(messageIds: string[], userId: string): Promise<void> {
+    await this.groupRepository.markGroupMessagesSeen(messageIds, userId);
+  }
+
+  async getUnreadCounts(userId: string): Promise<Record<string, number>> {
+    return await this.groupRepository.getUnreadCounts(userId);
+  }
+}
+
+export default GroupService;

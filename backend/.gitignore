@@ -19,6 +19,10 @@ Thumbs.db
 dist/
 build/
 
+# Uploaded files
+uploads/
+backend/uploads/
+
 # Dependency directories
 jspm_packages/
 

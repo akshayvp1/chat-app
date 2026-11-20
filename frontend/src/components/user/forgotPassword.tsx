@@ -6,14 +6,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import AppLogo from "./AppLogo";
 import authService from "../../services/user/userAuthService";
 import type { ForgotPasswordPayload } from "../../types/types";
+import { EMAIL_MAX_LENGTH, normalizeText, validateEmail } from "../../utils/validation";
 
-const BRAND_COLOR = "#5b7cfa";
-
-function isValidEmail(email: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
+const BRAND_COLOR = "#8065E8";
 
 export default function Forgot() {
   const navigate = useNavigate();
@@ -28,18 +26,15 @@ export default function Forgot() {
     setEmailError("");
     setApiError("");
 
-    if (!email.trim()) {
-      setEmailError("Email is required.");
-      return;
-    }
-    if (!isValidEmail(email)) {
-      setEmailError("Please enter a valid email.");
+    const emailError = validateEmail(email);
+    if (emailError) {
+      setEmailError(emailError);
       return;
     }
 
     setIsLoading(true);
 
-    const payload: ForgotPasswordPayload = { email };
+    const payload: ForgotPasswordPayload = { email: normalizeText(email) };
     const result = await authService.forgotPassword(payload);
 
     if (result.success) {
@@ -52,24 +47,28 @@ export default function Forgot() {
   }
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-indigo-50 p-4 sm:p-8 font-sans">
-      <Card className="w-full max-w-md rounded-3xl overflow-hidden shadow-2xl shadow-indigo-200/60">
+    <div className="flex items-center justify-center min-h-screen bg-[#EEE9FF] p-4 font-sans dark:bg-[#121117] sm:p-8">
+      <Card className="w-full max-w-md rounded-3xl overflow-hidden shadow-[0_24px_70px_rgba(128,101,232,0.18)]">
         <CardContent className="p-8 sm:p-10">
+          <div className="mb-5 flex justify-center">
+            <AppLogo className="h-12" />
+          </div>
+
           {isSuccess ? (
             <div className="flex flex-col items-center gap-4 text-center py-2">
 
-              <div className="w-16 h-16 rounded-full flex items-center justify-center bg-indigo-100">
+              <div className="w-16 h-16 rounded-full flex items-center justify-center bg-[#EEE9FF] dark:bg-[#8065E8]/20">
                 <Mail className="h-8 w-8" style={{ color: BRAND_COLOR }} />
               </div>
 
-              <p className="text-xl font-extrabold text-slate-900">Check your email</p>
-              <p className="text-sm text-gray-500 leading-relaxed">
+              <p className="text-xl font-extrabold text-foreground">Check your email</p>
+              <p className="text-sm text-muted-foreground leading-relaxed">
                 We've sent a password reset link to{" "}
-                <span className="font-semibold text-slate-700">{email}</span>.
+                <span className="font-semibold text-foreground">{email}</span>.
                 Please check your inbox and follow the instructions.
               </p>
 
-              <p className="text-xs text-gray-400">
+              <p className="text-xs text-muted-foreground/70">
                 Didn't receive it? Check your spam folder or{" "}
                 <button
                   type="button"
@@ -93,18 +92,18 @@ export default function Forgot() {
           ) : (
             <>
               <div className="flex flex-col items-center gap-3 mb-6">
-                <div className="w-14 h-14 rounded-full flex items-center justify-center bg-indigo-100">
+                <div className="w-14 h-14 rounded-full flex items-center justify-center bg-[#EEE9FF] dark:bg-[#8065E8]/20">
                   <Mail className="h-7 w-7" style={{ color: BRAND_COLOR }} />
                 </div>
-                <p className="text-xl font-extrabold text-slate-900">Forgot password?</p>
-                <p className="text-sm text-gray-500 text-center leading-relaxed">
+                <p className="text-xl font-extrabold text-foreground">Forgot password?</p>
+                <p className="text-sm text-muted-foreground text-center leading-relaxed">
                   No worries! Enter your email and we'll send you a reset link.
                 </p>
               </div>
 
               <div className="flex flex-col gap-4">
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold text-gray-600">Email</Label>
+                  <Label className="text-xs font-semibold text-muted-foreground">Email</Label>
                   <div className="relative">
                     <Input
                       type="email"
@@ -114,9 +113,10 @@ export default function Forgot() {
                         setEmailError("");
                       }}
                       placeholder="you@example.com"
-                      className={`pr-9 bg-slate-50 ${emailError ? "border-red-500 bg-red-50" : ""}`}
+                      maxLength={EMAIL_MAX_LENGTH}
+                      className={`pr-9 bg-muted/60 ${emailError ? "border-red-500 bg-red-50" : ""}`}
                     />
-                    <Mail className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                    <Mail className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/70 pointer-events-none" />
                   </div>
                   {emailError && <p className="text-xs text-red-500">{emailError}</p>}
                 </div>
@@ -139,7 +139,7 @@ export default function Forgot() {
                 <button
                   type="button"
                   onClick={() => navigate("/login")}
-                  className="flex items-center justify-center gap-1.5 text-xs font-medium text-gray-500 hover:text-slate-800 transition-colors"
+                  className="flex items-center justify-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
                 >
                   <ArrowLeft className="h-3.5 w-3.5" />
                   Back to Login

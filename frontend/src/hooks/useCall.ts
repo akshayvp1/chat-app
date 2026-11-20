@@ -1,0 +1,171 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import { socket } from "../socket/socket";
+import type { CallStatus, CallType, IncomingCall } from "../types/callTypes";
+import {
+  startIncomingRingtone,
+  startOutgoingRingback,
+  stopRingtone,
+} from "../utils/ringtone";
+import { useDirectCallMedia } from "../utils/webrtc";
+import { useCallSignaling } from "./useCallSignaling";
+
+export type { CallStatus, CallType } from "../types/callTypes";
+
+interface UseCallParams {
+  currentUserId: string;
+  currentUserName: string;
+  onCallEnded?: () => void;
+}
+
+export function useCall({
+  currentUserId,
+  currentUserName,
+  onCallEnded,
+}: UseCallParams) {
+  const [status, setStatus] = useState<CallStatus>("idle");
+  const [callType, setCallType] = useState<CallType | null>(null);
+  const [peer, setPeer] = useState<{ id: string; name: string } | null>(null);
+  const [incomingCall, setIncomingCall] = useState<IncomingCall | null>(null);
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
+  const [isMuted, setIsMuted] = useState(false);
+  const [isCameraOff, setIsCameraOff] = useState(false);
+
+  const pcRef = useRef<RTCPeerConnection | null>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const mediaPromiseRef = useRef<Promise<MediaStream> | null>(null);
+  const remoteStreamRef = useRef<MediaStream | null>(null);
+  const callIdRef = useRef<string | null>(null);
+  const peerRef = useRef<{ id: string; name: string } | null>(null);
+  const callTypeRef = useRef<CallType | null>(null);
+  const isCallerRef = useRef(false);
+  const statusRef = useRef<CallStatus>("idle");
+  const pendingCandidates = useRef<RTCIceCandidateInit[]>([]);
+  const onCallEndedRef = useRef(onCallEnded);
+
+  useEffect(() => {
+    onCallEndedRef.current = onCallEnded;
+  }, [onCallEnded]);
+
+  const emitCandidate = useCallback(
+    (callId: string, to: string, candidate: RTCIceCandidate) =>
+      socket.emit("call:ice-candidate", { callId, to, candidate }),
+    []
+  );
+
+  const media = useDirectCallMedia({
+    pcRef,
+    localStreamRef,
+    mediaPromiseRef,
+    remoteStreamRef,
+    callIdRef,
+    peerRef,
+    callTypeRef,
+    isCallerRef,
+    statusRef,
+    pendingCandidatesRef: pendingCandidates,
+    onCallEndedRef,
+    setStatus,
+    setCallType,
+    setPeer,
+    setIncomingCall,
+    setLocalStream,
+    setRemoteStream,
+    setIsMuted,
+    setIsCameraOff,
+    emitCandidate,
+  });
+
+  useEffect(() => {
+    if (status === "ringing") startIncomingRingtone(callType ?? "audio");
+    else if (status === "calling") startOutgoingRingback(callType ?? "audio");
+    else stopRingtone("direct");
+  }, [status, callType]);
+
+  useEffect(
+    () => () => {
+      stopRingtone("direct");
+      media.disposeMedia();
+    },
+    [media]
+  );
+
+  const acceptCall = useCallback(async () => {
+    if (!incomingCall) return;
+    const { callId, from, fromName, type } = incomingCall;
+
+    isCallerRef.current = false;
+    callIdRef.current = callId;
+    callTypeRef.current = type;
+    peerRef.current = { id: from, name: fromName };
+
+    setCallType(type);
+    setPeer({ id: from, name: fromName });
+    setIncomingCall(null);
+    media.updateStatus("connected");
+
+    try {
+      const stream = await media.getLocalMedia(type);
+      const pc = media.createPeerConnection(from, callId);
+      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+
+      socket.emit("call:accept", { callId, to: from, from: currentUserId });
+    } catch (err) {
+      console.error("Failed to get local media:", err);
+      socket.emit("call:reject", { callId, to: from, from: currentUserId });
+      media.cleanupCall();
+    }
+  }, [incomingCall, currentUserId, media]);
+
+  const toggleMute = useCallback(() => {
+    setIsMuted((prev) => {
+      const next = !prev;
+      localStreamRef.current?.getAudioTracks().forEach((t) => (t.enabled = !next));
+      return next;
+    });
+  }, []);
+
+  const toggleCamera = useCallback(() => {
+    setIsCameraOff((prev) => {
+      const next = !prev;
+      localStreamRef.current?.getVideoTracks().forEach((t) => (t.enabled = !next));
+      return next;
+    });
+  }, []);
+
+  const { startCall, rejectCall, endCall } = useCallSignaling({
+    currentUserId,
+    currentUserName,
+    incomingCall,
+    setIncomingCall,
+    setCallType,
+    setPeer,
+    refs: {
+      statusRef,
+      isCallerRef,
+      peerRef,
+      callTypeRef,
+      callIdRef,
+      pcRef,
+      pendingCandidates,
+    },
+    media,
+  });
+
+  return {
+    status,
+    callType,
+    peer,
+    incomingCall,
+    localStream,
+    remoteStream,
+    isMuted,
+    isCameraOff,
+    startCall,
+    acceptCall,
+    rejectCall,
+    endCall,
+    toggleMute,
+    toggleCamera,
+  };
+}

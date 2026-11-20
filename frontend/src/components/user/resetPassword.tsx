@@ -1,61 +1,28 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { useNavigate} from "react-router-dom";
-import { Eye, EyeOff, Lock, CheckCircle } from "lucide-react";
+import { Lock, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import AppLogo from "./AppLogo";
+import PasswordField from "./auth/PasswordField";
 import authService from "../../services/user/userAuthService";
 import type { ResetPasswordPayload, ValidationErrors } from "../../types/types";
 import { useParams } from "react-router-dom";
+import {
+  PASSWORD_MAX_LENGTH,
+  normalizeText,
+  validatePassword,
+  validatePasswordMatch,
+} from "../../utils/validation";
 
 
-const BRAND_COLOR = "#5b7cfa";
-
-function PasswordField({
-  label,
-  value,
-  error,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  error?: string;
-  onChange: (value: string) => void;
-}) {
-  const [showPassword, setShowPassword] = useState<boolean>(false);
-
-  return (
-    <div className="space-y-1.5">
-      <Label className="text-xs font-semibold text-gray-600">{label}</Label>
-      <div className="relative">
-        <Input
-          type={showPassword ? "text" : "password"}
-          value={value}
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => onChange(e.target.value)}
-          className={`pr-9 bg-slate-50 ${error ? "border-red-500 bg-red-50" : ""}`}
-        />
-        <button
-          type="button"
-          onClick={() => setShowPassword((prev) => !prev)}
-          aria-label="Toggle password visibility"
-          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-        >
-          {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-        </button>
-      </div>
-      {error && <p className="text-xs text-red-500">{error}</p>}
-    </div>
-  );
-}
+const BRAND_COLOR = "#8065E8";
 
 export default function ResetPassword() {
   const navigate = useNavigate();
 
   const { token } = useParams();
-
-  console.log("Token:", token);
 
   const [password, setPassword] = useState<string>("");
   const [confirmPassword, setConfirmPassword] = useState<string>("");
@@ -66,11 +33,11 @@ export default function ResetPassword() {
 
   async function handleSubmit(): Promise<void> {
     const newErrors: ValidationErrors = {};
+    const passwordError = validatePassword(password, true);
+    const confirmationError = validatePasswordMatch(password, confirmPassword);
 
-    if (!password) newErrors.password = "Password is required.";
-    else if (password.length < 8) newErrors.password = "Min. 8 characters.";
-    if (!confirmPassword) newErrors.confirmPassword = "Please confirm your password.";
-    else if (password !== confirmPassword) newErrors.confirmPassword = "Passwords do not match.";
+    if (passwordError) newErrors.password = passwordError;
+    if (confirmationError) newErrors.confirmPassword = confirmationError;
 
     setErrors(newErrors);
     if (Object.keys(newErrors).length) return;
@@ -83,7 +50,10 @@ export default function ResetPassword() {
     setIsLoading(true);
     setApiError("");
 
-    const payload: ResetPasswordPayload = { token, password };
+    const payload: ResetPasswordPayload = {
+      token: normalizeText(token),
+      password,
+    };
     const result = await authService.resetPassword(payload);
 
     if (result.success) {
@@ -96,18 +66,22 @@ export default function ResetPassword() {
   }
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-indigo-50 p-4 sm:p-8 font-sans">
-      <Card className="w-full max-w-md rounded-3xl overflow-hidden shadow-2xl shadow-indigo-200/60">
+    <div className="flex items-center justify-center min-h-screen bg-[#EEE9FF] p-4 font-sans dark:bg-[#121117] sm:p-8">
+      <Card className="w-full max-w-md rounded-3xl overflow-hidden shadow-[0_24px_70px_rgba(128,101,232,0.18)]">
         <CardContent className="p-8 sm:p-10">
+          <div className="mb-5 flex justify-center">
+            <AppLogo className="h-12" />
+          </div>
+
           {isSuccess ? (
             <div className="flex flex-col items-center gap-4 text-center py-2">
 
-              <div className="w-16 h-16 rounded-full flex items-center justify-center bg-indigo-100">
+              <div className="w-16 h-16 rounded-full flex items-center justify-center bg-[#EEE9FF] dark:bg-[#8065E8]/20">
                 <CheckCircle className="h-8 w-8" style={{ color: BRAND_COLOR }} />
               </div>
 
-              <p className="text-xl font-extrabold text-slate-900">Password reset!</p>
-              <p className="text-sm text-gray-500 leading-relaxed">
+              <p className="text-xl font-extrabold text-foreground">Password reset!</p>
+              <p className="text-sm text-muted-foreground leading-relaxed">
                 Your password has been reset successfully. You can now log in with your new password.
               </p>
 
@@ -122,11 +96,11 @@ export default function ResetPassword() {
           ) : (
             <>
               <div className="flex flex-col items-center gap-3 mb-6">
-                <div className="w-14 h-14 rounded-full flex items-center justify-center bg-indigo-100">
+                <div className="w-14 h-14 rounded-full flex items-center justify-center bg-[#EEE9FF] dark:bg-[#8065E8]/20">
                   <Lock className="h-7 w-7" style={{ color: BRAND_COLOR }} />
                 </div>
-                <p className="text-xl font-extrabold text-slate-900">Reset password</p>
-                <p className="text-sm text-gray-500 text-center leading-relaxed">
+                <p className="text-xl font-extrabold text-foreground">Reset password</p>
+                <p className="text-sm text-muted-foreground text-center leading-relaxed">
                   Enter your new password below.
                 </p>
               </div>
@@ -136,6 +110,7 @@ export default function ResetPassword() {
                   label="New Password"
                   value={password}
                   error={errors.password}
+                  maxLength={PASSWORD_MAX_LENGTH}
                   onChange={(value) => {
                     setPassword(value);
                     setErrors((prev) => ({ ...prev, password: "" }));
@@ -146,6 +121,7 @@ export default function ResetPassword() {
                   label="Confirm Password"
                   value={confirmPassword}
                   error={errors.confirmPassword}
+                  maxLength={PASSWORD_MAX_LENGTH}
                   onChange={(value) => {
                     setConfirmPassword(value);
                     setErrors((prev) => ({ ...prev, confirmPassword: "" }));
@@ -170,7 +146,7 @@ export default function ResetPassword() {
                 <button
                   type="button"
                   onClick={() => navigate("/login")}
-                  className="text-xs font-medium text-gray-500 hover:text-slate-800 transition-colors text-center"
+                  className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors text-center"
                 >
                   Back to Login
                 </button>
