@@ -94,7 +94,7 @@ async function verifyOtp(
       data: response.data,
       message: response.data.message,
     };
-  } catch (error) {
+  } catch {
     return {
       success: false,
       message:
@@ -107,7 +107,7 @@ async function resendOtp(payload: OtpResendPayload): Promise<AuthResult<{ messag
   try {
     const response = await axiosInstance.post<{ message: string }>(`${API_BASE_URL}/resend-otp`, payload);
     return { success: true, data: response.data, message: response.data.message };
-  } catch (error) {
+  } catch {
     return {
       success: false,
       message:"Failed to resend OTP. Please try again.",
@@ -120,7 +120,7 @@ async function resendOtp(payload: OtpResendPayload): Promise<AuthResult<{ messag
   try {
     const response = await axiosInstance.post<{ message: string }>(`${API_BASE_URL}/forgot-password`, payload);
     return { success: true, data: response.data, message: response.data.message };
-  } catch (error) {
+  } catch {
     return {
       success: false,
       message: "Failed to send reset link. Please try again.",

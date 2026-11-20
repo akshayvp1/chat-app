@@ -1,395 +1,250 @@
-import React, { useState, useRef, useEffect } from "react";
-import {
-  Send,
-  Search,
-  MoreVertical,
-  Phone,
-  Video,
-  Paperclip,
-  Smile,
-  ArrowLeft,
-  LogOut,
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import type { Contact, Message } from "../../types/types";
-import { UserList } from "../../types/types";
-import chatService from "@/services/user/chatService";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-
-const BRAND_COLOR = "#5b7cfa";
-
-function Avatar({
-  initials,
-  online,
-  size = "md",
-}: {
-  initials: string;
-  online?: boolean;
-  size?: "sm" | "md" | "lg";
-}) {
-  const sizes = {
-    sm: "w-8 h-8 text-xs",
-    md: "w-10 h-10 text-sm",
-    lg: "w-12 h-12 text-base",
-  };
-  return (
-    <div className="relative shrink-0">
-      <div
-        className={`${sizes[size]} rounded-full flex items-center justify-center font-bold text-white`}
-        style={{ backgroundColor: BRAND_COLOR }}
-      >
-        {initials}
-      </div>
-      {online !== undefined && (
-        <span
-          className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-white ${online ? "bg-green-400" : "bg-gray-300"}`}
-        />
-      )}
-    </div>
-  );
-}
+import { useAppDispatch, useAppSelector } from "../../redux/hooks";
+import { useCall } from "../../hooks/useCall";
+import { useGroupCall } from "../../hooks/useGroupCall";
+import { useDirectChatSocket } from "../../hooks/useDirectChatSocket";
+import { useChatSettings } from "../../hooks/useChatSettings";
+import { useMessageComposer } from "../../hooks/useMessageComposer";
+import { logout } from "../../redux/slices/authSlice";
+import { addMessage, clearChat, clearContactUnread, setSelectedContact } from "../../redux/slices/chatSlice";
+import { clearGroupChat, clearGroupUnread, setSelectedGroup } from "../../redux/slices/groupSlice";
+import chatService from "@/services/user/chatService";
+import { disconnectSocket } from "@/socket/socket";
+import type { UserList } from "../../types/types";
+import CallModal from "./CallModal";
+import GroupCallModal from "./GroupCallModal";
+import MinimizedCallBar from "../MinimizedCallBar";
+import ChatLayout from "./chat/ChatLayout";
 
 export default function Chat() {
-  const [selectedContact, setSelectedContact] = useState<UserList | null>(null);
-
-  const [contacts, setContacts] = useState<UserList[]>([]);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [newMessage, setNewMessage] = useState<string>("");
-  const [searchQuery, setSearchQuery] = useState<string>("");
-  const [showSidebar, setShowSidebar] = useState<boolean>(true);
-
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const dispatch = useAppDispatch();
   const navigate = useNavigate();
-  const filteredContacts = contacts.filter((c) =>
-    c.name.toLowerCase().includes(searchQuery.toLowerCase()),
-  );
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  const currentUserId = useAppSelector((s) => s.auth.user?._id ?? "");
+  const currentUserName = useAppSelector((s) => s.auth.user?.name ?? "");
+  const currentUser = useAppSelector((s) => s.auth.user);
+  const messages = useAppSelector((s) => s.chat.messages);
+  const contacts = useAppSelector((s) => s.chat.contacts);
+  const selectedContact = useAppSelector((s) => s.chat.selectedContact);
+  const selectedContactId = useAppSelector((s) => s.chat.selectedContact?._id ?? null);
+  const unreadByContact = useAppSelector((s) => s.chat.unreadByContact);
+  const groups = useAppSelector((s) => s.group.groups);
+  const selectedGroup = useAppSelector((s) => s.group.selectedGroup);
+  const selectedGroupId = useAppSelector((s) => s.group.selectedGroup?._id ?? null);
+  const unreadByGroup = useAppSelector((s) => s.group.unreadByGroup);
+  const groupMessages = useAppSelector((s) => s.group.groupMessages);
+
+  const [historyVersion, setHistoryVersion] = useState(0);
+  const [isGroupCallMinimized, setIsGroupCallMinimized] = useState(false);
+
+  // ─────────────────────────────────────────────────────────────
+  // 1-to-1 Calling
+  // ─────────────────────────────────────────────────────────────
+
+  const call = useCall({ currentUserId, currentUserName, onCallEnded: () => setHistoryVersion((v) => v + 1) });
+
+  // ─────────────────────────────────────────────────────────────
+  // Group Calling
+  // IMPORTANT:
+  // This hook is at Chat level, NOT inside GroupChat.
+  //
+  // Therefore switching between chats/groups does not destroy
+  // the active group WebRTC call.
+  // ─────────────────────────────────────────────────────────────
+
+  const groupCall = useGroupCall({
+    currentUserId,
+    currentUserName,
+    onCallEnded: () => {
+      setIsGroupCallMinimized(false);
+      setHistoryVersion((v) => v + 1);
+    },
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // IMPORTANT:
+  //
+  // Do NOT use selectedGroup here.
+  //
+  // If the user is in Group A call and switches to Group B,
+  // selectedGroup becomes Group B.
+  //
+  // We need the group belonging to the active call.
+  // ─────────────────────────────────────────────────────────────
+
+  const activeCallGroup = groups.find((g) => g._id === groupCall.groupId);
+  const composer = useMessageComposer({
+    target: { kind: "direct", receiverId: selectedContactId, ready: !!selectedContact },
+    currentUserId,
+    onMessageAdded: (message) => dispatch(addMessage(message)),
+  });
+  const settings = useChatSettings({ call, groupCall, onToast: (toast) => composer.setToast(toast) });
+  const { onlineUsers, isTyping, clearTypingIndicator } = useDirectChatSocket({
+    currentUserId,
+    selectedContact,
+    selectedGroupId,
+    contacts,
+    groups,
+    notificationPrefs: settings.notificationPrefs,
+    callActive: call.status !== "idle" || groupCall.status !== "idle",
+  });
 
   function selectContact(user: UserList) {
-    setSelectedContact(user);
-    setShowSidebar(false);
+    dispatch(setSelectedContact(user));
+    dispatch(setSelectedGroup(null));
+    dispatch(clearContactUnread(user._id));
+    composer.clearPendingAttachments();
+    composer.setShowEmojiPicker(false);
+    clearTypingIndicator();
   }
 
-  useEffect(() => {
-    fetchUsers();
-  }, []);
-
-  async function fetchUsers() {
-    try {
-      const result = await chatService.getUsers();
-
-      if (result.success && result.data) {
-        setContacts(result.data);
-      }
-    } catch (error) {
-      console.log(error);
+  function selectGroup(group: Parameters<typeof setSelectedGroup>[0]) {
+    dispatch(setSelectedGroup(group));
+    dispatch(setSelectedContact(null));
+    if (group) {
+      dispatch(clearGroupUnread(group._id));
     }
-  }
-
-  function sendMessage() {
-    if (!newMessage.trim() || !selectedContact) return;
-
-    const message: Message = {
-      id: Date.now().toString(),
-      text: newMessage.trim(),
-      sender: "me",
-      time: new Date().toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-      seen: false,
-    };
-
-    setMessages((prev) => [...prev, message]);
-    setNewMessage("");
-    // TODO: send message to API
-    // await chatService.sendMessage({ contactId: selectedContact.id, text: message.text });
-  }
-
-  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Enter") sendMessage();
+    composer.clearPendingAttachments();
+    composer.setShowEmojiPicker(false);
   }
 
   async function handleLogout() {
+    if (groupCall.status !== "idle") groupCall.leaveCall();
+    if (call.status !== "idle") call.endCall();
+
+    composer.clearTypingState();
+    disconnectSocket();
+    dispatch(clearChat());
+    dispatch(clearGroupChat());
+
     try {
       await chatService.logout();
-      navigate("/chat");
-    } catch (error) {
-      console.log(error);
+    } finally {
+      dispatch(logout());
+      navigate("/login", { replace: true });
     }
   }
 
+  function handleStartAudioCall() {
+    if (!selectedContact) return;
+    call.startCall(selectedContact._id, selectedContact.name, "audio");
+  }
+
+  function handleStartVideoCall() {
+    if (!selectedContact) return;
+    call.startCall(selectedContact._id, selectedContact.name, "video");
+  }
+
   return (
-    <div className="flex h-screen bg-indigo-50 font-sans overflow-hidden">
-      {/* Sidebar */}
-      <div
-        className={`${
-          showSidebar ? "flex" : "hidden"
-        } sm:flex flex-col w-full sm:w-80 bg-white border-r border-slate-100 shrink-0`}
-      >
-        {/* Sidebar header */}
-        <div className="flex items-center justify-between px-4 py-4 border-b border-slate-100">
-          <p className="text-lg font-extrabold text-slate-900">Messages</p>
-          <div className="flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleLogout}
-              className="text-gray-400 hover:text-slate-700"
-            >
-              <LogOut className="h-5 w-5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="text-gray-400 hover:text-slate-700"
-            >
-              <MoreVertical className="h-5 w-5" />
-            </Button>
-          </div>
-        </div>
+    <div className="flex h-dvh min-h-0 overflow-hidden bg-background font-sans text-foreground">
+      <ChatLayout
+        currentUserId={currentUserId}
+        currentUserName={currentUserName}
+        currentUserProfile={currentUser?.profile}
+        contacts={contacts}
+        groups={groups}
+        selectedContact={selectedContact}
+        selectedGroup={selectedGroup}
+        messages={messages}
+        groupMessages={groupMessages}
+        unreadByContact={unreadByContact}
+        unreadByGroup={unreadByGroup}
+        onlineUsers={onlineUsers}
+        isTyping={isTyping}
+        callStatus={call.status}
+        groupCall={groupCall}
+        composer={composer}
+        settings={settings}
+        historyVersion={historyVersion}
+        onSelectContact={selectContact}
+        onSelectGroup={selectGroup}
+        onStartAudioCall={handleStartAudioCall}
+        onStartVideoCall={handleStartVideoCall}
+        onLogout={handleLogout}
+      />
 
-        {/* Search */}
-        <div className="px-4 py-3">
-          <div className="relative">
-            <Input
-              type="text"
-              placeholder="Search conversations..."
-              value={searchQuery}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                setSearchQuery(e.target.value)
-              }
-              className="pl-9 bg-slate-50 text-sm"
-            />
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-          </div>
-        </div>
+      {/* ─────────────────────────────────────────────────────────
+          1-to-1 Call modal
+          
+          Existing implementation preserved.
+      ───────────────────────────────────────────────────────── */}
 
-        {/* Contact list */}
-        <div className="flex-1 overflow-y-auto">
-          {filteredContacts.length > 0 ? (
-            filteredContacts.map((user) => (
-              <button
-                key={user._id}
-                type="button"
-                onClick={() => selectContact(user)}
-                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-indigo-50 transition-colors text-left"
-              >
-                <Avatar
-                  initials={user.name.substring(0, 2).toUpperCase()}
-                  online={true}
-                />
+      <CallModal
+        status={call.status}
+        callType={call.callType}
+        peerName={call.peer?.name ?? call.incomingCall?.fromName}
+        localStream={call.localStream}
+        remoteStream={call.remoteStream}
+        isMuted={call.isMuted}
+        isCameraOff={call.isCameraOff}
+        onAccept={call.acceptCall}
+        onReject={call.rejectCall}
+        onEnd={call.endCall}
+        onToggleMute={call.toggleMute}
+        onToggleCamera={call.toggleCamera}
+      />
 
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-slate-800">
-                    {user.name}
-                  </p>
+      {/* ─────────────────────────────────────────────────────────
+          GROUP CALL MODAL
+          
+          This is deliberately rendered at Chat root rather than
+          inside GroupChat.
+          
+          That means:
+          
+          Group A selected
+              ↓
+          Start group call
+              ↓
+          Switch to Group B
+              ↓
+          Group call CONTINUES
+      ───────────────────────────────────────────────────────── */}
 
-                  <p className="text-xs text-gray-500">{user.email}</p>
-                </div>
-              </button>
-            ))
-          ) : (
-            <div className="flex flex-col items-center justify-center gap-2 mt-16 px-4 text-center">
-              <div className="w-12 h-12 rounded-full flex items-center justify-center bg-indigo-100">
-                <Search className="h-5 w-5" style={{ color: BRAND_COLOR }} />
-              </div>
-              <p className="text-sm font-semibold text-slate-700">
-                No contacts found
-              </p>
-              <p className="text-xs text-gray-400">
-                Try searching with a different name.
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
+      {groupCall.status !== "idle" && !isGroupCallMinimized && (
+        <GroupCallModal
+          status={groupCall.status}
+          callType={groupCall.callType}
+          groupName={activeCallGroup?.name}
+          incomingFromName={groupCall.incomingCall?.fromName}
+          localStream={groupCall.localStream}
+          participants={groupCall.participants}
+          isMuted={groupCall.isMuted}
+          isCameraOff={groupCall.isCameraOff}
+          onAccept={groupCall.acceptCall}
+          onDecline={groupCall.declineCall}
+          onLeave={groupCall.leaveCall}
+          onToggleMute={groupCall.toggleMute}
+          onToggleCamera={groupCall.toggleCamera}
+          onMinimize={() => setIsGroupCallMinimized(true)}
+        />
+      )}
 
-      {/* Chat area */}
-      <div
-        className={`${!showSidebar ? "flex" : "hidden"} sm:flex flex-1 flex-col min-w-0`}
-      >
-        {selectedContact ? (
-          <>
-            {/* Chat header */}
-            <div className="flex items-center gap-3 px-4 py-3 bg-white border-b border-slate-100 shadow-sm">
-              <button
-                type="button"
-                onClick={() => setShowSidebar(true)}
-                className="sm:hidden text-gray-400 hover:text-slate-700 mr-1"
-              >
-                <ArrowLeft className="h-5 w-5" />
-              </button>
+      {/* ─────────────────────────────────────────────────────────
+          MINIMIZED GROUP CALL BAR
+          
+          Only shown when:
+          
+          1. User clicked minimize
+          2. Call is connecting OR in-call
+          
+          Incoming/other terminal states stay in the modal so
+          accept/decline/end controls remain available.
+      ───────────────────────────────────────────────────────── */}
 
-              <Avatar
-                initials={selectedContact.name.substring(0, 2).toUpperCase()}
-                online={true}
-                size="md"
-              />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-bold text-slate-900">
-                  {selectedContact.name}
-                </p>
-                <p className="text-xs text-gray-400">{selectedContact.email}</p>
-              </div>
-
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="text-gray-400 hover:text-slate-700"
-                >
-                  <Phone className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="text-gray-400 hover:text-slate-700"
-                >
-                  <Video className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="text-gray-400 hover:text-slate-700"
-                >
-                  <MoreVertical className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-
-            {/* Messages */}
-            <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-3">
-              {messages.length > 0 ? (
-                messages.map((message) => (
-                  <div
-                    key={message.id}
-                    className={`flex ${message.sender === "me" ? "justify-end" : "justify-start"}`}
-                  >
-                    {message.sender === "other" && (
-                      <div className="mr-2 mt-auto">
-                        <Avatar
-                          initials={selectedContact.name
-                            .charAt(0)
-                            .toUpperCase()}
-                          size="sm"
-                        />
-                      </div>
-                    )}
-                    <div
-                      className={`max-w-[70%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
-                        message.sender === "me"
-                          ? "text-white rounded-br-sm"
-                          : "bg-white text-slate-800 rounded-bl-sm shadow-sm"
-                      }`}
-                      style={
-                        message.sender === "me"
-                          ? { backgroundColor: BRAND_COLOR }
-                          : {}
-                      }
-                    >
-                      <p>{message.text}</p>
-                      <div
-                        className={`flex items-center gap-1 mt-1 ${
-                          message.sender === "me"
-                            ? "justify-end"
-                            : "justify-start"
-                        }`}
-                      >
-                        <span
-                          className={`text-[10px] ${
-                            message.sender === "me"
-                              ? "text-indigo-200"
-                              : "text-gray-400"
-                          }`}
-                        >
-                          {message.time}
-                        </span>
-                        {message.sender === "me" && (
-                          <span className="text-[10px] text-indigo-200">
-                            {message.seen ? "✓✓" : "✓"}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="flex-1 flex flex-col items-center justify-center gap-2 text-center mt-20">
-                  <div className="w-12 h-12 rounded-full flex items-center justify-center bg-indigo-100">
-                    <Send className="h-5 w-5" style={{ color: BRAND_COLOR }} />
-                  </div>
-                  <p className="text-sm font-semibold text-slate-700">
-                    No messages yet
-                  </p>
-                  <p className="text-xs text-gray-400">
-                    Say hi to start the conversation!
-                  </p>
-                </div>
-              )}
-              <div ref={messagesEndRef} />
-            </div>
-
-            {/* Message input */}
-            <div className="px-4 py-3 bg-white border-t border-slate-100">
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="text-gray-400 hover:text-slate-700 shrink-0"
-                >
-                  <Paperclip className="h-4 w-4" />
-                </Button>
-                <div className="flex-1 relative">
-                  <Input
-                    type="text"
-                    placeholder="Type a message..."
-                    value={newMessage}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                      setNewMessage(e.target.value)
-                    }
-                    onKeyDown={handleKeyDown}
-                    className="bg-slate-50 pr-10 text-sm"
-                  />
-                  <button
-                    type="button"
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-slate-600"
-                  >
-                    <Smile className="h-4 w-4" />
-                  </button>
-                </div>
-                <Button
-                  onClick={sendMessage}
-                  disabled={!newMessage.trim()}
-                  className="shrink-0 rounded-full w-9 h-9 p-0 flex items-center justify-center"
-                  style={{
-                    backgroundColor: BRAND_COLOR,
-                    opacity: !newMessage.trim() ? 0.6 : 1,
-                  }}
-                >
-                  <Send className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          </>
-        ) : (
-          <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center p-8">
-            <div className="w-16 h-16 rounded-full flex items-center justify-center bg-indigo-100">
-              <Send className="h-7 w-7" style={{ color: BRAND_COLOR }} />
-            </div>
-            <p className="text-lg font-extrabold text-slate-900">
-              Your Messages
-            </p>
-            <p className="text-sm text-gray-500">
-              Select a conversation to start chatting.
-            </p>
-          </div>
+      {isGroupCallMinimized &&
+        (groupCall.status === "connecting" ||
+          groupCall.status === "in-call") && (
+          <MinimizedCallBar
+            title={activeCallGroup?.name ?? "Group call"}
+            isVideo={groupCall.callType === "video"}
+            isConnecting={groupCall.status === "connecting"}
+            startedAt={groupCall.startedAt}
+            onExpand={() => setIsGroupCallMinimized(false)}
+            onEnd={groupCall.leaveCall}
+          />
         )}
-      </div>
     </div>
   );
 }
