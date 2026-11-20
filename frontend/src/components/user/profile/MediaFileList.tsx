@@ -1,5 +1,5 @@
 import { Download, FileText, Music2 } from "lucide-react";
-import { resolveFileUrl } from "../../../utils/axiosInstance";
+import { resolveFileUrl } from "../../../utils/fileUrl";
 import { formatSize, type MediaItem } from "./profileMedia";
 
 interface MediaFileListProps {

@@ -1,5 +1,5 @@
 import { Video } from "lucide-react";
-import { resolveFileUrl } from "../../../utils/axiosInstance";
+import { resolveFileUrl } from "../../../utils/fileUrl";
 import type { MediaItem } from "./profileMedia";
 
 interface MediaGridProps {

@@ -1,6 +1,6 @@
 import { Download, FileText } from "lucide-react";
 import type { MessageAttachment } from "../../types/types";
-import { resolveFileUrl } from "../../utils/axiosInstance";
+import { resolveFileUrl } from "../../utils/fileUrl";
 
 interface AttachmentGalleryProps {
   attachments?: MessageAttachment[];

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { resolveFileUrl } from "../../utils/axiosInstance";
+import { isDisplayableImageUrl, resolveFileUrl } from "../../utils/fileUrl";
 
 const BRAND_COLOR = "#8065E8";
 
@@ -10,11 +10,6 @@ interface AvatarProps {
   size?: "sm" | "md" | "lg" | "xl";
   color?: string;
   className?: string;
-}
-
-function isDisplayableImageUrl(url?: string): boolean {
-  if (!url) return false;
-  return /^(https?:\/\/|blob:|data:|\/)/i.test(url);
 }
 
 export default function Avatar({
