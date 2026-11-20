@@ -12,7 +12,7 @@ import { Server } from "socket.io";
 
 import "./config/container";
 import router from "./routes/router";
-import redisClient from "./config/redis";
+import { connectRedis, disconnectRedis } from "./config/redis";
 import { initializeSocket } from "./socket/socket";
 import { RequestError } from "./utils/validation";
 import { configureMongoDns, getMongoDnsServers } from "./config/mongoDns";
@@ -86,10 +86,7 @@ async function startServer() {
     console.log("MongoDB connected successfully");
     console.log("Database:", mongoose.connection.name);
 
-    if (!redisClient.isOpen) {
-      await redisClient.connect();
-      console.log("Redis connected");
-    }
+    await connectRedis();
 
     app.use("/api", router);
 
@@ -136,9 +133,7 @@ async function startServer() {
         await mongoose.disconnect();
       }
 
-      if (redisClient.isOpen) {
-        await redisClient.quit();
-      }
+      await disconnectRedis();
     } catch (cleanupError) {
       console.error("Cleanup error:", getMongoErrorDetails(cleanupError));
     }
