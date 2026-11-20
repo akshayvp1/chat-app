@@ -1,5 +1,6 @@
 import mongoose, { Schema } from "mongoose";
 import { IMessage } from "../interfaces/IMessage";
+import { AttachmentSchema } from "./Attachment";
 
 const CallInfoSchema = new Schema(
   {
@@ -17,13 +18,13 @@ const MessageSchema = new Schema<IMessage>(
     text: {
       type: String,
       required: function (this: IMessage) {
-        // Call-log entries carry no text — only require it for real chat text.
-        return this.type !== "call";
+        return this.type !== "call" && !(this.attachments && this.attachments.length > 0);
       },
       default: "",
     },
     type: { type: String, enum: ["text", "call"], default: "text" },
     call: { type: CallInfoSchema, required: false },
+    attachments: { type: [AttachmentSchema], default: [] },
     seen: { type: Boolean, default: false },
     expiresAt: {
       type: Date,

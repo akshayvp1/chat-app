@@ -25,4 +25,9 @@ export interface IGroupController {
     req: Request,
     res: Response
   ): Promise<void>;
+
+  getUnreadCounts(
+    req: Request,
+    res: Response
+  ): Promise<void>;
 }

@@ -34,6 +34,15 @@ const groupService = {
       return { success: false, message: "Failed to fetch group messages" };
     }
   },
+
+  async getUnreadCounts(): Promise<ServiceResponse<Record<string, number>>> {
+    try {
+      const res = await axiosInstance.get("/group/unread-counts");
+      return { success: true, data: res.data.data };
+    } catch {
+      return { success: false, message: "Failed to fetch unread counts" };
+    }
+  },
 };
 
 export default groupService;

@@ -4,6 +4,14 @@ import axiosInstance from "../utils/axiosInstance";
 import { useAppDispatch } from "../redux/hooks";
 import { setUser } from "../redux/slices/authSlice";
 import type { User } from "../types/types";
+import { normalizeText } from "../utils/validation";
+
+type AuthCheckUser = Partial<User> & { userId?: string };
+
+type AuthCheckResponse = {
+  success: boolean;
+  user?: AuthCheckUser | null;
+};
 
 type Props = {
   children: ReactNode;
@@ -17,12 +25,23 @@ const ProtectedRoute = ({ children }: Props) => {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const res = await axiosInstance.get<{ success: boolean; user: User }>(
-          "/user/check"
-        );
-        const user = res.data.user;
-        // Normalize: backend may return userId instead of _id
-        dispatch(setUser({ ...user, _id: user._id ?? (user as any).userId }));
+        const res = await axiosInstance.get<AuthCheckResponse>("/user/check");
+        const checkedUser = res.data.user ?? {};
+        const id = normalizeText(checkedUser._id ?? checkedUser.userId ?? "");
+
+        if (!res.data.success || !id) {
+          throw new Error("Unauthorized");
+        }
+
+        const user: User = {
+          ...checkedUser,
+          _id: id,
+          name: normalizeText(checkedUser.name ?? ""),
+          email: normalizeText(checkedUser.email ?? ""),
+          phone: normalizeText(checkedUser.phone ?? ""),
+        };
+
+        dispatch(setUser(user));
         setAuthenticated(true);
       } catch {
         setAuthenticated(false);

@@ -1,5 +1,6 @@
 import { IGroup } from "../../interfaces/IGroup";
 import { IGroupMessage, IGroupCallInfo } from "../../interfaces/IGroupMessage";
+import { IAttachment } from "../../interfaces/IAttachment";
 
 export interface IGroupRepository {
   createGroup(
@@ -14,7 +15,12 @@ export interface IGroupRepository {
   addMember(groupId: string, userId: string): Promise<void>;
   removeMember(groupId: string, userId: string): Promise<void>;
 
-  saveGroupMessage(groupId: string, senderId: string, text: string): Promise<IGroupMessage>;
+  saveGroupMessage(
+    groupId: string,
+    senderId: string,
+    text: string,
+    attachments?: IAttachment[]
+  ): Promise<IGroupMessage>;
 
   saveGroupCallMessage(
     groupId: string,
@@ -24,4 +30,5 @@ export interface IGroupRepository {
 
   getGroupMessages(groupId: string): Promise<IGroupMessage[]>;
   markGroupMessagesSeen(messageIds: string[], userId: string): Promise<void>;
+  getUnreadCounts(userId: string): Promise<Record<string, number>>;
 }

@@ -9,6 +9,12 @@ const chatController =
   container.resolve(ChatController);
 
 chatRouter.get(
+  "/unread-counts",
+  authMiddleware,
+  chatController.getUnreadCounts
+);
+
+chatRouter.get(
   "/messages/:receiverId",
   authMiddleware,
   chatController.getMessages

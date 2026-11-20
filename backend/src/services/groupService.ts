@@ -3,6 +3,7 @@ import { IGroupService } from "./interface/IGroupService";
 import { IGroupRepository } from "../repositories/interface/IGroupRepository";
 import { IGroup } from "../interfaces/IGroup";
 import { IGroupMessage, IGroupCallInfo } from "../interfaces/IGroupMessage";
+import { IAttachment } from "../interfaces/IAttachment";
 
 @injectable()
 class GroupService implements IGroupService {
@@ -30,8 +31,13 @@ class GroupService implements IGroupService {
     await this.groupRepository.removeMember(groupId, userId);
   }
 
-  async saveGroupMessage(groupId: string, senderId: string, text: string): Promise<IGroupMessage> {
-    return await this.groupRepository.saveGroupMessage(groupId, senderId, text);
+  async saveGroupMessage(
+    groupId: string,
+    senderId: string,
+    text: string,
+    attachments?: IAttachment[]
+  ): Promise<IGroupMessage> {
+    return await this.groupRepository.saveGroupMessage(groupId, senderId, text, attachments);
   }
 
   async saveGroupCallMessage(
@@ -48,6 +54,10 @@ class GroupService implements IGroupService {
 
   async markGroupMessagesSeen(messageIds: string[], userId: string): Promise<void> {
     await this.groupRepository.markGroupMessagesSeen(messageIds, userId);
+  }
+
+  async getUnreadCounts(userId: string): Promise<Record<string, number>> {
+    return await this.groupRepository.getUnreadCounts(userId);
   }
 }
 

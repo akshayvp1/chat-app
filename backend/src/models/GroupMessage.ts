@@ -1,5 +1,6 @@
 import mongoose, { Schema } from "mongoose";
 import { IGroupMessage } from "../interfaces/IGroupMessage";
+import { AttachmentSchema } from "./Attachment";
 
 const GroupCallInfoSchema = new Schema(
   {
@@ -18,12 +19,13 @@ const GroupMessageSchema = new Schema<IGroupMessage>(
     text: {
       type: String,
       required: function (this: IGroupMessage) {
-        return this.type !== "call";
+        return this.type !== "call" && !(this.attachments && this.attachments.length > 0);
       },
       default: "",
     },
     type: { type: String, enum: ["text", "call"], default: "text" },
     call: { type: GroupCallInfoSchema, required: false },
+    attachments: { type: [AttachmentSchema], default: [] },
     seenBy: [{ type: Schema.Types.ObjectId, ref: "User" }],
     expiresAt: {
       type: Date,

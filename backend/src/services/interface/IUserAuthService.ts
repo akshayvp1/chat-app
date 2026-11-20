@@ -1,4 +1,4 @@
-import { IUser } from "../../interfaces/IUser";
+import { IUser, ProfileUpdate, PublicUser } from "../../interfaces/IUser";
 
 export interface IUserAuthService {
   register(
@@ -21,7 +21,7 @@ export interface IUserAuthService {
   ): Promise<{
     accessToken: string;
     refreshToken: string;
-    user: IUser;
+    user: PublicUser;
   }>;
 
   resendOtp(
@@ -36,7 +36,7 @@ export interface IUserAuthService {
   ): Promise<{
     accessToken: string;
     refreshToken: string;
-    user: IUser;
+    user: PublicUser;
   }>;
 
   forgotPassword(
@@ -52,9 +52,9 @@ export interface IUserAuthService {
     message: string;
   }>;
 
-  getUsers(
-    userId: string
-  ): Promise<IUser[]>;
+  updateProfile(userId: string, updates: ProfileUpdate): Promise<PublicUser>;
+
+  getUsers(userId: string): Promise<PublicUser[]>;
 
   refreshToken(
     refreshToken: string

@@ -1,4 +1,5 @@
 import { Document, Types } from "mongoose";
+import { IAttachment } from "./IAttachment";
 
 export interface IGroupCallInfo {
   callType: "audio" | "video";
@@ -22,6 +23,7 @@ export interface IGroupMessage extends Document {
   text: string;
   type: "text" | "call";
   call?: IGroupCallInfo;
+  attachments?: IAttachment[];
   seenBy: Types.ObjectId[];
   expiresAt: Date;
   createdAt: Date;

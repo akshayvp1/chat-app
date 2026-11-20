@@ -7,6 +7,7 @@ const groupRouter = Router();
 const groupController = container.resolve(GroupController);
 
 groupRouter.post("/", authMiddleware, groupController.createGroup);
+groupRouter.get("/unread-counts", authMiddleware, groupController.getUnreadCounts);
 groupRouter.get("/my-groups", authMiddleware, groupController.getMyGroups);
 groupRouter.get("/:groupId/messages", authMiddleware, groupController.getGroupMessages);
 groupRouter.post("/:groupId/members", authMiddleware, groupController.addMember);

@@ -6,9 +6,26 @@ import type {
   AxiosError,
 } from "axios";
 
+export const API_BASE_URL: string =
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:3000/api";
+
+export function resolveFileUrl(url?: string): string {
+  if (!url) return "";
+
+  const trimmed = url.trim();
+
+  if (!trimmed) return "";
+  if (/^(blob:|data:|https?:\/\/)/i.test(trimmed)) return trimmed;
+
+  const apiOrigin = API_BASE_URL.replace(/\/api\/?$/, "").replace(/\/$/, "");
+  if (trimmed.startsWith("/")) return `${apiOrigin}${trimmed}`;
+
+  return `${apiOrigin}/${trimmed}`;
+}
+
 const axiosInstance: AxiosInstance = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || "http://localhost:3000/api",
-  timeout: 10000,
+  baseURL: API_BASE_URL,
+  timeout: 30000,
   withCredentials: true, // IMPORTANT for cookies
   headers: {
     "Content-Type": "application/json",

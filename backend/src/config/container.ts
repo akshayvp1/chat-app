@@ -23,7 +23,9 @@ import CallController from "../controllers/callController";
 import CallService from "../services/callService";
 import CallRepository from "../repositories/callRepository";
 import GroupCallController from "../controllers/groupCallController";
+import UploadController from "../controllers/uploadController";
 import GroupCallService from "../services/groupCallService";
+import UploadService from "../services/uploadService";
 import GroupCallRepository from "../repositories/groupCallRepository";
 
 //models
@@ -39,12 +41,14 @@ container.register("ChatController",{useClass:ChatController})
 container.register("GroupController", { useClass: GroupController });
 container.register("CallController", { useClass: CallController });
 container.register("GroupCallController", { useClass: GroupCallController });
+container.register("UploadController", { useClass: UploadController });
 //services
 container.register("UserAuthService",{useClass:UserAuthService})
 container.register("ChatService",{useClass:ChatService})
 container.register("GroupService", { useClass: GroupService });
 container.register("CallService", { useClass: CallService });
 container.register("GroupCallService", { useClass: GroupCallService });
+container.register("UploadService", { useClass: UploadService });
 //repositories
 container.register("UserAuthRepository",{useClass:UserAuthRepository})
 container.register("ChatRepository",{useClass:ChatRepository})

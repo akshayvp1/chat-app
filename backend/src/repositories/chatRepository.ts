@@ -1,6 +1,7 @@
 import { injectable, inject } from "tsyringe";
 import { Model } from "mongoose";
 import { IMessage, ICallInfo } from "../interfaces/IMessage";
+import { IAttachment } from "../interfaces/IAttachment";
 import { IChatRepository } from "../repositories/interface/IChatRepository";
 
 @injectable()
@@ -10,8 +11,19 @@ class ChatRepository implements IChatRepository {
     private messageModel: Model<IMessage>
   ) {}
 
-  async saveMessage(senderId: string, receiverId: string, text: string): Promise<IMessage> {
-    return await this.messageModel.create({ senderId, receiverId, text, type: "text" });
+  async saveMessage(
+    senderId: string,
+    receiverId: string,
+    text: string,
+    attachments?: IAttachment[]
+  ): Promise<IMessage> {
+    return await this.messageModel.create({
+      senderId,
+      receiverId,
+      text,
+      type: "text",
+      attachments: attachments ?? [],
+    });
   }
 
   async saveCallMessage(senderId: string, receiverId: string, call: ICallInfo): Promise<IMessage> {
@@ -39,6 +51,19 @@ class ChatRepository implements IChatRepository {
       { _id: { $in: messageIds } },
       { seen: true }
     );
+  }
+
+  async getUnreadCounts(receiverId: string): Promise<Record<string, number>> {
+    const messages = await this.messageModel
+      .find({ receiverId, seen: false, type: { $ne: "call" } })
+      .select("senderId");
+
+    const counts: Record<string, number> = {};
+    for (const message of messages) {
+      const senderId = String(message.senderId);
+      counts[senderId] = (counts[senderId] ?? 0) + 1;
+    }
+    return counts;
   }
 }
 

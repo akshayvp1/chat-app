@@ -2,6 +2,7 @@ import { injectable, inject } from "tsyringe";
 import { Model } from "mongoose";
 import { IGroup } from "../interfaces/IGroup";
 import { IGroupMessage, IGroupCallInfo } from "../interfaces/IGroupMessage";
+import { IAttachment } from "../interfaces/IAttachment";
 import { IGroupRepository } from "./interface/IGroupRepository";
 
 @injectable()
@@ -50,12 +51,18 @@ class GroupRepository implements IGroupRepository {
    * expose a flat `senderName` — this is the field socketHandler.ts already
    * reads as `saved.senderName`, so no changes are needed there.
    */
-  async saveGroupMessage(groupId: string, senderId: string, text: string): Promise<IGroupMessage> {
+  async saveGroupMessage(
+    groupId: string,
+    senderId: string,
+    text: string,
+    attachments?: IAttachment[]
+  ): Promise<IGroupMessage> {
     const created = await this.groupMessageModel.create({
       groupId,
       senderId,
       text,
       type: "text",
+      attachments: attachments ?? [],
       seenBy: [senderId],
     });
 
@@ -101,6 +108,27 @@ class GroupRepository implements IGroupRepository {
       { _id: { $in: messageIds } },
       { $addToSet: { seenBy: userId } }
     );
+  }
+
+  async getUnreadCounts(userId: string): Promise<Record<string, number>> {
+    const groups = await this.groupModel.find({ members: userId }).select("_id");
+    const groupIds = groups.map((group) => String(group._id));
+
+    const messages = await this.groupMessageModel
+      .find({
+        groupId: { $in: groupIds },
+        senderId: { $ne: userId },
+        seenBy: { $ne: userId },
+        type: { $ne: "call" },
+      })
+      .select("groupId");
+
+    const counts: Record<string, number> = {};
+    for (const message of messages) {
+      const groupId = String(message.groupId);
+      counts[groupId] = (counts[groupId] ?? 0) + 1;
+    }
+    return counts;
   }
 
   /**

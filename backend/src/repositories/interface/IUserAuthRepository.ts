@@ -1,4 +1,4 @@
-import { IUser } from "../../interfaces/IUser";
+import { IUser, ProfileUpdate, PublicUser } from "../../interfaces/IUser";
 
 export interface IUserAuthRepository {
   findByEmail(email: string): Promise<IUser | null>;
@@ -17,5 +17,10 @@ export interface IUserAuthRepository {
     password: string
   ): Promise<IUser | null>;
 
-  getUsers(currentUserId: string): Promise<IUser[]>;
+  updateProfile(
+    userId: string,
+    updates: ProfileUpdate
+  ): Promise<PublicUser | null>;
+
+  getUsers(currentUserId: string): Promise<PublicUser[]>;
 }

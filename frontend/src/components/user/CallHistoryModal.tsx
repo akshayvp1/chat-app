@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { PhoneIncoming, PhoneOutgoing, PhoneMissed, X } from "lucide-react";
 import callService, { CallLogEntry } from "@/services/user/callService";
 
-const BRAND_COLOR = "#5b7cfa";
+const BRAND_COLOR = "#8065E8";
 
 interface CallHistoryModalProps {
   currentUserId: string;
@@ -15,17 +15,32 @@ export default function CallHistoryModal({
   refreshKey,
   onClose,
 }: CallHistoryModalProps) {
-  const [history, setHistory] = useState<CallLogEntry[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [state, setState] = useState<{
+    refreshKey: number;
+    loading: boolean;
+    history: CallLogEntry[];
+  }>({
+    refreshKey,
+    loading: true,
+    history: [],
+  });
+
+  const isCurrent = state.refreshKey === refreshKey;
+  const loading = isCurrent ? state.loading : true;
+  const history = isCurrent ? state.history : [];
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
+
     callService.getHistory().then((res) => {
       if (cancelled) return;
-      if (res.success && res.data) setHistory(res.data);
-      setLoading(false);
+      setState({
+        refreshKey,
+        loading: false,
+        history: res.success && res.data ? res.data : [],
+      });
     });
+
     return () => {
       cancelled = true;
     };
@@ -49,14 +64,16 @@ export default function CallHistoryModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl w-full max-w-md max-h-[80vh] flex flex-col shadow-xl">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-          <p className="text-lg font-extrabold text-slate-900">Call History</p>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3 sm:p-4">
+      <div className="flex max-h-[calc(100dvh-1.5rem)] w-full max-w-md flex-col rounded-2xl border border-border bg-card shadow-xl sm:max-h-[calc(100dvh-2rem)]" role="dialog" aria-modal="true" aria-labelledby="call-history-title">
+        <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-4 sm:px-5 dark:border-border">
+          <p id="call-history-title" className="text-lg font-extrabold text-foreground">Call History</p>
           <button
             type="button"
             onClick={onClose}
-            className="text-gray-400 hover:text-slate-700"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            title="Close call history"
+            aria-label="Close call history"
           >
             <X className="h-5 w-5" />
           </button>
@@ -64,9 +81,9 @@ export default function CallHistoryModal({
 
         <div className="flex-1 overflow-y-auto px-2 py-2">
           {loading ? (
-            <p className="text-sm text-gray-400 text-center mt-10">Loading...</p>
+            <p className="mt-10 text-center text-sm text-muted-foreground">Loading...</p>
           ) : history.length === 0 ? (
-            <p className="text-sm text-gray-400 text-center mt-10">No calls yet</p>
+            <p className="mt-10 text-center text-sm text-muted-foreground">No calls yet</p>
           ) : (
             history.map((entry) => {
               const isOutgoing = getId(entry.callerId) === currentUserId;
@@ -88,22 +105,22 @@ export default function CallHistoryModal({
               return (
                 <div
                   key={entry._id}
-                  className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-slate-50"
+                  className="flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-muted"
                 >
                   <div
-                    className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
                     style={{ backgroundColor: `${iconColor}20` }}
                   >
                     <Icon className="h-4 w-4" style={{ color: iconColor }} />
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-slate-800">{label}</p>
-                    <p className="text-xs text-gray-400 capitalize">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-foreground">{label}</p>
+                    <p className="truncate text-xs capitalize text-muted-foreground">
                       {entry.type} · {entry.status}
                       {entry.duration ? ` · ${formatDuration(entry.duration)}` : ""}
                     </p>
                   </div>
-                  <p className="text-xs text-gray-400 shrink-0">
+                  <p className="hidden shrink-0 text-xs tabular-nums text-muted-foreground sm:block">
                     {new Date(entry.startedAt).toLocaleString([], {
                       month: "short",
                       day: "numeric",

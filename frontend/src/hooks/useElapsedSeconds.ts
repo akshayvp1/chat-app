@@ -1,21 +1,32 @@
 import { useEffect, useState } from "react";
 
 export function useElapsedSeconds(startTime: number | null): number {
-  const [elapsed, setElapsed] = useState(0);
+  const [timer, setTimer] = useState<{
+    startTime: number;
+    elapsed: number;
+  } | null>(null);
 
   useEffect(() => {
-    if (!startTime) {
-      setElapsed(0);
-      return;
-    }
-    setElapsed(Math.floor((Date.now() - startTime) / 1000));
-    const interval = setInterval(() => {
-      setElapsed(Math.floor((Date.now() - startTime) / 1000));
-    }, 1000);
-    return () => clearInterval(interval);
+    if (!startTime) return;
+
+    const update = () => {
+      setTimer({
+        startTime,
+        elapsed: Math.max(0, Math.floor((Date.now() - startTime) / 1000)),
+      });
+    };
+
+    const timeout = setTimeout(update, 0);
+    const interval = setInterval(update, 1000);
+
+    return () => {
+      clearTimeout(timeout);
+      clearInterval(interval);
+    };
   }, [startTime]);
 
-  return elapsed;
+  if (!startTime) return 0;
+  return timer?.startTime === startTime ? timer.elapsed : 0;
 }
 
 export function formatDuration(totalSeconds: number): string {

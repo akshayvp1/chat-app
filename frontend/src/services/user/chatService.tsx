@@ -47,12 +47,26 @@ const chatService = {
     }
   },
 
+  async getUnreadCounts(): Promise<ServiceResponse<Record<string, number>>> {
+    try {
+      const response = await axiosInstance.get("/chat/unread-counts");
+      return {
+        success: true,
+        data: response.data.data,
+      };
+    } catch {
+      return {
+        success: false,
+        message: "Failed to fetch unread counts",
+      };
+    }
+  },
+
   async logout(): Promise<void> {
     try {
       await axiosInstance.post(`${API_BASE_URL}/logout`);
-      window.location.href = "/login";
-    } catch (error) {
-      console.error("Logout failed:", error);
+    } catch {
+      return;
     }
   },
 };

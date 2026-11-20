@@ -20,6 +20,8 @@ export interface IUserAuthController {
     res: Response
   ): Promise<Response>;
 
+  updateProfile(req: Request, res: Response): Promise<Response>;
+
   getUsers(req: Request, res: Response): Promise<Response>;
 
   refreshToken(req: Request, res: Response): Promise<Response>;

@@ -1,8 +1,7 @@
-import React from "react";
 import { Phone, Video, PhoneOff, Maximize2 } from "lucide-react";
 import { useElapsedSeconds, formatDuration } from "../hooks/useElapsedSeconds";
 
-const BRAND_COLOR = "#5b7cfa";
+const BRAND_COLOR = "#8065E8";
 
 interface MinimizedCallBarProps {
   title: string;
@@ -25,20 +24,29 @@ export default function MinimizedCallBar({
 
   return (
     <div
-      className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-slate-900 text-white rounded-full shadow-2xl px-3 py-2 cursor-pointer max-w-[92vw]"
+      className="fixed bottom-3 left-2 right-2 z-50 flex max-w-full cursor-pointer items-center gap-2 rounded-2xl bg-[#241B45] px-3 py-2 text-white shadow-2xl sm:bottom-4 sm:left-1/2 sm:right-auto sm:w-auto sm:max-w-[min(24rem,calc(100vw-2rem))] sm:-translate-x-1/2 sm:rounded-full"
       onClick={onExpand}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onExpand();
+        }
+      }}
       role="button"
+      tabIndex={0}
+      title="Expand call"
+      aria-label="Expand call"
     >
       <div
-        className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 animate-pulse"
+        className="flex h-9 w-9 shrink-0 animate-pulse items-center justify-center rounded-full"
         style={{ backgroundColor: BRAND_COLOR }}
       >
         {isVideo ? <Video className="h-4 w-4" /> : <Phone className="h-4 w-4" />}
       </div>
 
-      <div className="flex flex-col min-w-0 pr-1">
-        <span className="text-xs font-semibold truncate max-w-[120px]">{title}</span>
-        <span className="text-[10px] text-slate-300">
+      <div className="flex min-w-0 flex-1 flex-col pr-1 sm:flex-none">
+        <span className="max-w-full truncate text-xs font-semibold sm:max-w-[140px]">{title}</span>
+        <span className="text-[10px] text-[#C9BFFF]">
           {isConnecting ? "Ringing..." : formatDuration(elapsed)}
         </span>
       </div>
@@ -49,8 +57,9 @@ export default function MinimizedCallBar({
           e.stopPropagation();
           onEnd();
         }}
-        className="w-8 h-8 rounded-full bg-red-500 flex items-center justify-center shrink-0 ml-1"
+        className="ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-red-500 hover:bg-red-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
         title="End call"
+        aria-label="End call"
       >
         <PhoneOff className="h-3.5 w-3.5" />
       </button>
@@ -61,8 +70,9 @@ export default function MinimizedCallBar({
           e.stopPropagation();
           onExpand();
         }}
-        className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center shrink-0"
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10 hover:bg-white/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
         title="Expand"
+        aria-label="Expand call overlay"
       >
         <Maximize2 className="h-3.5 w-3.5" />
       </button>

@@ -15,12 +15,14 @@ interface ChatState {
   contacts: UserList[];
   selectedContact: UserList | null;
   messages: ChatMessage[];
+  unreadByContact: Record<string, number>;
 }
 
 const initialState: ChatState = {
   contacts: [],
   selectedContact: null,
   messages: [],
+  unreadByContact: {},
 };
 
 const chatSlice = createSlice({
@@ -70,8 +72,46 @@ const chatSlice = createSlice({
 
     markMessagesSeen: (state, action: PayloadAction<string[]>) => {
       state.messages = state.messages.map((msg) =>
-        action.payload.includes(msg._id) ? { ...msg, seen: true } : msg
+        action.payload.includes(msg._id)
+          ? { ...msg, seen: true, status: "read" }
+          : msg
       );
+    },
+
+    markMessageDelivered: (
+      state,
+      action: PayloadAction<{ messageId: string; tempId?: string }>
+    ) => {
+      state.messages = state.messages.map((msg) => {
+        const matches =
+          msg._id === action.payload.messageId ||
+          (!!action.payload.tempId && msg.tempId === action.payload.tempId);
+        return matches && msg.status === "sent"
+          ? { ...msg, status: "delivered" }
+          : msg;
+      });
+    },
+
+    incrementContactUnread: (state, action: PayloadAction<string>) => {
+      const contactId = action.payload;
+      state.unreadByContact[contactId] =
+        (state.unreadByContact[contactId] ?? 0) + 1;
+    },
+
+    setContactUnreadCount: (
+      state,
+      action: PayloadAction<Record<string, number>>
+    ) => {
+      Object.entries(action.payload).forEach(([contactId, count]) => {
+        state.unreadByContact[contactId] = Math.max(
+          state.unreadByContact[contactId] ?? 0,
+          count
+        );
+      });
+    },
+
+    clearContactUnread: (state, action: PayloadAction<string>) => {
+      delete state.unreadByContact[action.payload];
     },
 
     // was: clearChatState
@@ -79,6 +119,7 @@ const chatSlice = createSlice({
       state.selectedContact = null;
       state.messages = [];
       state.contacts = [];
+      state.unreadByContact = {};
     },
   },
 });
@@ -91,6 +132,10 @@ export const {
   replaceMessage,
   markMessageError,
   markMessagesSeen,
+  markMessageDelivered,
+  incrementContactUnread,
+  setContactUnreadCount,
+  clearContactUnread,
   clearChat,
 } = chatSlice.actions;
 

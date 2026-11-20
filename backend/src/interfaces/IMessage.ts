@@ -1,4 +1,5 @@
 import { Document, Types } from "mongoose";
+import { IAttachment } from "./IAttachment";
 
 export type MessageType = "text" | "call";
 export type CallLogStatus = "completed" | "missed" | "rejected";
@@ -15,6 +16,7 @@ export interface IMessage extends Document {
   text: string;
   type: MessageType;
   call?: ICallInfo;
+  attachments?: IAttachment[];
   seen: boolean;
   expiresAt: Date;
   createdAt: Date;

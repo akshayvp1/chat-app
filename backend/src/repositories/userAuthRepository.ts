@@ -1,7 +1,7 @@
 import { Model } from "mongoose";
 import { injectable } from "tsyringe";
 import { IUserAuthRepository } from "../repositories/interface/IUserAuthRepository";
-import { IUser } from "../interfaces/IUser";
+import { IUser, ProfileUpdate } from "../interfaces/IUser";
 import { User } from "../models/userModels";
 
 @injectable()
@@ -10,7 +10,7 @@ class UserAuthRepository implements IUserAuthRepository {
 
   async findByEmail(email: string): Promise<IUser | null> {
     try {
-      return await this.UserModel.findOne({ email });
+      return await this.UserModel.findOne({ email }).collation({ locale: "en", strength: 2 });
     } catch (error) {
       throw error;
     }
@@ -41,7 +41,6 @@ updatePassword = async (
   userId: string,
   password: string
 ) => {
-    console.log("repository")
   return await this.UserModel.findByIdAndUpdate(
     userId,
     {
@@ -50,7 +49,18 @@ updatePassword = async (
   );
 };
 
- getUsers = async (currentUserId: string) => {
+  updateProfile = async (
+    userId: string,
+    updates: ProfileUpdate
+  ): Promise<IUser | null> => {
+    return await this.UserModel.findByIdAndUpdate(
+      userId,
+      { $set: updates },
+      { new: true, runValidators: true }
+    ).select("-password");
+  };
+
+  getUsers = async (currentUserId: string) => {
   const users = await User.find(
     { _id: { $ne: currentUserId } },
     { password: 0 }  
