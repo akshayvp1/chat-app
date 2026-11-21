@@ -51,19 +51,19 @@ export function registerDirectCallLifecycle(
       if (to === userId) return;
 
       if ((await hasActiveDirectCall(userId)) || (await hasActiveDirectCall(to))) {
-        emitUnavailable(socket, callId, "busy");
-        io.to(userId).emit("call:state", makeState(callId, "missed", userId, "busy"));
+        emitUnavailable(socket, callId, "busy", type);
+        io.to(userId).emit("call:state", makeState(callId, "missed", userId, "busy", undefined, type));
         return;
       }
 
       if (await redisClient.get(`call:${callId}`)) {
-        emitUnavailable(socket, callId, "duplicate");
+        emitUnavailable(socket, callId, "duplicate", type);
         return;
       }
 
       if (!(await hasConnectedRecipient(io, to))) {
-        emitUnavailable(socket, callId, "offline");
-        io.to(userId).emit("call:state", makeState(callId, "missed", userId, "offline"));
+        emitUnavailable(socket, callId, "offline", type);
+        io.to(userId).emit("call:state", makeState(callId, "missed", userId, "offline", undefined, type));
         return;
       }
 
@@ -71,21 +71,22 @@ export function registerDirectCallLifecycle(
       await redisClient.set(`call:${callId}`, call._id.toString());
       await redisClient.set(`call:${callId}:caller`, userId);
       await redisClient.set(`call:${callId}:receiver`, to);
+      await redisClient.set(`call:${callId}:type`, type);
       await redisClient.set(directCallOwnerKey(callId, "caller"), socket.id);
       await redisClient.set(`activecall:${userId}`, callId);
       await redisClient.set(`activecall:${to}`, callId);
 
-      io.to(userId).emit("call:state", makeState(callId, "calling", userId, undefined, socket.id));
+      io.to(userId).emit("call:state", makeState(callId, "calling", userId, undefined, socket.id, type));
       io.to(to).emit("call:incoming", { callId, to, from: userId, fromName, type });
-      io.to(to).emit("call:state", makeState(callId, "ringing", userId));
+      io.to(to).emit("call:state", makeState(callId, "ringing", userId, undefined, undefined, type));
 
       const timer = setTimeout(async () => {
         removeRingingTimer(callId);
         try {
           if (!(await redisClient.get(`call:${callId}`))) return;
           await finalizeCall(io, callService, chatService, callId, "missed", undefined, userId);
-          io.to(userId).emit("call:timeout", { callId });
-          io.to(to).emit("call:cancelled", { callId });
+          io.to(userId).emit("call:timeout", { callId, callType: type });
+          io.to(to).emit("call:cancelled", { callId, callType: type });
         } catch (error) {
           console.error("call timeout error:", error);
         }
@@ -120,8 +121,8 @@ export function registerDirectCallLifecycle(
           undefined,
           signal.participants.receiver,
         );
-        io.to(signal.participants.caller).emit("call:timeout", { callId: signal.callId });
-        io.to(signal.participants.receiver).emit("call:cancelled", { callId: signal.callId });
+        io.to(signal.participants.caller).emit("call:timeout", { callId: signal.callId, callType: signal.callType });
+        io.to(signal.participants.receiver).emit("call:cancelled", { callId: signal.callId, callType: signal.callType });
       } catch (error) {
         console.error("call connect timeout error:", error);
       }
@@ -132,11 +133,12 @@ export function registerDirectCallLifecycle(
       io,
       signal.participants.caller,
       signal.participants.receiver,
-      makeState(signal.callId, "connecting", userId, undefined, socket.id),
+      makeState(signal.callId, "connecting", userId, undefined, socket.id, signal.callType),
     );
     io.to(signal.to).emit("call:accepted", {
       callId: signal.callId,
       from: userId,
+      callType: signal.callType,
     });
   });
 
@@ -150,7 +152,7 @@ export function registerDirectCallLifecycle(
       io,
       signal.participants.caller,
       signal.participants.receiver,
-      makeState(signal.callId, "connected", userId, undefined, socket.id),
+      makeState(signal.callId, "connected", userId, undefined, socket.id, signal.callType),
     );
   });
 
@@ -169,7 +171,7 @@ export function registerDirectCallLifecycle(
       socket.id,
       userId,
     );
-    io.to(signal.to).emit("call:rejected", { callId: signal.callId, from: userId });
+    io.to(signal.to).emit("call:rejected", { callId: signal.callId, from: userId, callType: signal.callType });
   });
 
   socket.on("call:cancel", async (data: unknown) => {
@@ -186,7 +188,7 @@ export function registerDirectCallLifecycle(
       socket.id,
       userId,
     );
-    io.to(signal.to).emit("call:cancelled", { callId: signal.callId, from: userId });
+    io.to(signal.to).emit("call:cancelled", { callId: signal.callId, from: userId, callType: signal.callType });
   });
 
   socket.on("call:end", async (data: unknown) => {
@@ -194,7 +196,7 @@ export function registerDirectCallLifecycle(
     if (!signal) return;
 
     clearRingingTimer(signal.callId);
-    const wasConnected = await redisClient.get(`callconnected:${signal.callId}`);
+    const wasConnected = await redisClient.get(`callready:${signal.callId}`);
     await finalizeCall(
       io,
       callService,
@@ -204,6 +206,6 @@ export function registerDirectCallLifecycle(
       socket.id,
       userId,
     );
-    io.to(signal.to).emit("call:ended", { callId: signal.callId, from: userId });
+    io.to(signal.to).emit("call:ended", { callId: signal.callId, from: userId, callType: signal.callType });
   });
 }

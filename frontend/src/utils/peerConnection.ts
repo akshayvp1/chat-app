@@ -20,6 +20,9 @@ export function createPeerConnection(
   pc.onicecandidate = (event) => {
     if (event.candidate) handlers.onCandidate(event.candidate);
   };
+  pc.onicecandidateerror = (event) => {
+    console.warn("ICE candidate error:", event);
+  };
   pc.ontrack = (event) => handlers.onTrack(event);
   pc.onconnectionstatechange = () => {
     handlers.onConnectionChange?.(pc.connectionState);

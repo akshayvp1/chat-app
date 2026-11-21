@@ -15,6 +15,7 @@ export interface ParsedDirectCallSignal {
   callId: string;
   to: string;
   role: DirectCallRole;
+  callType: "audio" | "video";
   participants: { caller: string; receiver: string };
 }
 
@@ -24,16 +25,18 @@ export function makeState(
   from: string,
   reason?: string,
   originSocketId?: string,
+  callType?: "audio" | "video",
 ): DirectCallStatePayload {
-  return { callId, status, from, reason, originSocketId, at: Date.now() };
+  return { callId, status, from, callType, reason, originSocketId, at: Date.now() };
 }
 
 export function emitUnavailable(
   socket: Socket,
   callId?: string,
   reason = "unavailable",
+  callType?: "audio" | "video",
 ): void {
-  socket.emit("call:unavailable", { callId, reason });
+  socket.emit("call:unavailable", { callId, reason, callType });
 }
 
 export async function parseDirectCallSignal(
@@ -63,7 +66,10 @@ export async function parseDirectCallSignal(
       return null;
     }
 
-    return { callId, to, role, participants: { caller, receiver } };
+    const storedType = await redisClient.get(`call:${callId}:type`);
+    const callType = storedType === "video" ? "video" : "audio";
+
+    return { callId, to, role, callType, participants: { caller, receiver } };
   } catch (error) {
     console.error(`${label} error:`, error);
     return null;

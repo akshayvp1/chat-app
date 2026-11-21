@@ -28,8 +28,9 @@ export interface UseCallEventHandlersParams {
   getLocalMedia: DirectCallMedia["getLocalMedia"];
   createPeerConnection: DirectCallMedia["createPeerConnection"];
   finishCall: DirectCallMedia["finishCall"];
-  endCall: () => void;
   setIncomingCall: (call: IncomingCall | null) => void;
+  setCallType: (type: CallType | null) => void;
+  setPeer: (peer: { id: string; name: string } | null) => void;
 }
 
 export function useCallEventHandlers({
@@ -39,8 +40,9 @@ export function useCallEventHandlers({
   getLocalMedia,
   createPeerConnection,
   finishCall,
-  endCall,
   setIncomingCall,
+  setCallType,
+  setPeer,
 }: UseCallEventHandlersParams): void {
   const { statusRef, isCallerRef, peerRef, callTypeRef, callIdRef, pcRef, pendingCandidates } = refs;
 
@@ -58,18 +60,24 @@ export function useCallEventHandlers({
       callIdRef.current = data.callId;
       peerRef.current = { id: data.from, name: data.fromName };
       callTypeRef.current = data.type;
+      setCallType(data.type);
+      setPeer({ id: data.from, name: data.fromName });
       setIncomingCall(data);
       updateStatus("ringing");
     }
 
     async function onAccepted(data: DirectCallSignalEvent) {
       if (!isCallerRef.current || !isCurrentCall(data.callId) || !isFromPeer(data.from)) return;
-      if (pcRef.current || !callTypeRef.current) return;
+      if (pcRef.current) return;
+      const callType = data.callType ?? callTypeRef.current;
+      if (!callType) return;
+      callTypeRef.current = callType;
+      setCallType(callType);
 
       try {
         updateStatus("connecting");
-        await getRtcConfiguration();
-        const stream = await getLocalMedia(callTypeRef.current);
+        await getRtcConfiguration(true);
+        const stream = await getLocalMedia(callType);
         if (!isCurrentCall(data.callId) || pcRef.current) return;
 
         const pc = createPeerConnection(data.from, data.callId);
@@ -83,17 +91,28 @@ export function useCallEventHandlers({
           callId: data.callId,
           to: data.from,
           from: currentUserId,
-          offer,
+          callType,
+          offer: { type: offer.type, sdp: offer.sdp },
         });
       } catch (err) {
         console.error("Failed to start offer:", err);
-        endCall();
+        socket.emit("call:end", {
+          callId: data.callId,
+          to: data.from,
+          from: currentUserId,
+          reason: "media",
+        });
+        finishCall("ended");
       }
     }
 
     async function onOffer(data: DirectCallSignalEvent) {
       if (isCallerRef.current || !isCurrentCall(data.callId) || !isFromPeer(data.from)) return;
       if (!data.offer) return;
+      if (data.callType && !callTypeRef.current) {
+        callTypeRef.current = data.callType;
+        setCallType(data.callType);
+      }
 
       const pc = pcRef.current;
       if (!pc || pc.signalingState !== "stable") return;
@@ -111,10 +130,18 @@ export function useCallEventHandlers({
           callId: data.callId,
           to: data.from,
           from: currentUserId,
-          answer,
+          callType: callTypeRef.current,
+          answer: { type: answer.type, sdp: answer.sdp },
         });
       } catch (err) {
         console.error("Failed to answer offer:", err);
+        socket.emit("call:end", {
+          callId: data.callId,
+          to: data.from,
+          from: currentUserId,
+          reason: "media",
+        });
+        finishCall("ended");
       }
     }
 
@@ -163,22 +190,28 @@ export function useCallEventHandlers({
     const onCancelled = terminalHandler("missed");
     const onEnded = terminalHandler("ended");
     const onTimeout = terminalHandler("missed");
-    const onUnavailable = terminalHandler("missed");
+
+    function onUnavailable(data?: { callId?: string; reason?: string; callType?: CallType }) {
+      if (!isCurrentCall(data?.callId)) return;
+      if (statusRef.current !== "calling" && statusRef.current !== "ringing") return;
+      if (data?.callType && !callTypeRef.current) {
+        callTypeRef.current = data.callType;
+        setCallType(data.callType);
+      }
+      finishCall("missed");
+    }
 
     function onState(data: DirectCallStateEvent) {
       if (!data?.callId || !isCurrentCall(data.callId)) return;
       if (data.originSocketId === socket.id) return;
+      if (data.callType && !callTypeRef.current) {
+        callTypeRef.current = data.callType;
+        setCallType(data.callType);
+      }
 
       switch (data.status) {
         case "connecting":
-          if (statusRef.current === "ringing" && !pcRef.current) {
-            setIncomingCall(null);
-            callIdRef.current = null;
-            peerRef.current = null;
-            callTypeRef.current = null;
-            updateStatus("idle");
-            break;
-          }
+          if (data.reason === "stale-socket") break;
           if (statusRef.current === "calling" || statusRef.current === "ringing") {
             updateStatus("connecting");
           }
@@ -230,14 +263,15 @@ export function useCallEventHandlers({
     callTypeRef,
     createPeerConnection,
     currentUserId,
-    endCall,
     finishCall,
     getLocalMedia,
     isCallerRef,
     pcRef,
     peerRef,
     pendingCandidates,
+    setCallType,
     setIncomingCall,
+    setPeer,
     statusRef,
     updateStatus,
   ]);

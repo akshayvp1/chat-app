@@ -29,8 +29,8 @@ function getLabel(call: CallInfo | GroupCallInfo, variant: "direct" | "group") {
       directCall.status === "rejected"
     ) {
       return directCall.status === "missed"
-        ? "Missed call"
-        : "Call declined";
+        ? `Missed ${callName.toLowerCase()} call`
+        : `${callName} call declined`;
     }
 
     return `${callName} call · ${duration}`;
@@ -39,7 +39,7 @@ function getLabel(call: CallInfo | GroupCallInfo, variant: "direct" | "group") {
   const groupCall = call as GroupCallInfo;
 
   if (groupCall.status === "missed") {
-    return "Missed group call";
+    return `Missed ${callName.toLowerCase()} group call`;
   }
 
   return `${callName} call · ${duration} · ${groupCall.participantCount} joined`;

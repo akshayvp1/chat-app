@@ -57,7 +57,8 @@ export interface DirectCallMedia {
 
 export function useDirectCallMedia({
   pcRef, localStreamRef,
-  mediaPromiseRef, remoteStreamRef,
+  mediaPromiseRef, mediaRequestIdRef,
+  remoteStreamRef,
   callIdRef, peerRef,
   callTypeRef, isCallerRef,
   statusRef, pendingCandidatesRef,
@@ -86,7 +87,7 @@ export function useDirectCallMedia({
 
   const disposeCallMedia = useCallback(() => {
     clearCallTimers();
-    disposeMediaResources({ localStreamRef, mediaPromiseRef }, { pcRef });
+    disposeMediaResources({ localStreamRef, mediaPromiseRef, mediaRequestIdRef }, { pcRef });
     remoteStreamRef.current = null;
     callIdRef.current = null;
     peerRef.current = null;
@@ -101,6 +102,7 @@ export function useDirectCallMedia({
     isCallerRef,
     localStreamRef,
     mediaPromiseRef,
+    mediaRequestIdRef,
     pcRef,
     peerRef,
     pendingCandidatesRef,
@@ -157,8 +159,8 @@ export function useDirectCallMedia({
 
   const getLocalMediaForCall = useCallback(
     (type: CallType) =>
-      requestLocalMedia(type, { localStreamRef, mediaPromiseRef }, setLocalStream),
-    [setLocalStream, localStreamRef, mediaPromiseRef]
+      requestLocalMedia(type, { localStreamRef, mediaPromiseRef, mediaRequestIdRef }, setLocalStream),
+    [setLocalStream, localStreamRef, mediaPromiseRef, mediaRequestIdRef]
   );
 
   const createCallPeerConnection = useCallback(

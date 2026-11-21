@@ -42,14 +42,17 @@ async function cleanupDirectCall(
     if (owner && owner !== socket.id) return;
 
     clearRingingTimer(activeCallId);
-    const wasConnected = await redisClient.get(`callconnected:${activeCallId}`);
+    const wasConnected = await redisClient.get(`callready:${activeCallId}`);
     const finalStatus: DirectCallStatus = wasConnected ? "completed" : "missed";
+    const storedType = await redisClient.get(`call:${activeCallId}:type`);
+    const callType = storedType === "video" ? "video" : "audio";
     const counterpart = role === "caller" ? participants.receiver : participants.caller;
 
     await finalizeCall(activeCallId, finalStatus, socket.id, userId);
     io.to(counterpart).emit("call:ended", {
       callId: activeCallId,
       from: userId,
+      callType,
     });
   } catch (error) {
     console.error("disconnect call cleanup error:", error);

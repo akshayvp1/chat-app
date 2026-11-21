@@ -27,6 +27,7 @@ export interface DirectCallStateEvent {
   callId: string;
   status: CallStatus;
   from: string;
+  callType?: CallType;
   reason?: string;
   originSocketId?: string;
   at: number;
@@ -35,6 +36,7 @@ export interface DirectCallStateEvent {
 export interface DirectCallSignalEvent {
   callId: string;
   from: string;
+  callType?: CallType;
   offer?: RTCSessionDescriptionInit;
   answer?: RTCSessionDescriptionInit;
   candidate?: RTCIceCandidateInit;

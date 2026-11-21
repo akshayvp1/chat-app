@@ -34,6 +34,7 @@ export function useCall({
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const mediaPromiseRef = useRef<Promise<MediaStream> | null>(null);
+  const mediaRequestIdRef = useRef(0);
   const remoteStreamRef = useRef<MediaStream | null>(null);
   const callIdRef = useRef<string | null>(null);
   const peerRef = useRef<{ id: string; name: string } | null>(null);
@@ -49,13 +50,24 @@ export function useCall({
 
   const emitCandidate = useCallback(
     (callId: string, to: string, candidate: RTCIceCandidate) =>
-      socket.emit("call:ice-candidate", { callId, to, from: currentUserId, candidate }),
+      socket.emit("call:ice-candidate", {
+        callId,
+        to,
+        from: currentUserId,
+        callType: callTypeRef.current,
+        candidate: candidate.toJSON(),
+      }),
     [currentUserId]
   );
 
   const emitConnected = useCallback(
     (callId: string, to: string) =>
-      socket.emit("call:connected", { callId, to, from: currentUserId }),
+      socket.emit("call:connected", {
+        callId,
+        to,
+        from: currentUserId,
+        callType: callTypeRef.current,
+      }),
     [currentUserId]
   );
 
@@ -69,6 +81,7 @@ export function useCall({
     pcRef,
     localStreamRef,
     mediaPromiseRef,
+    mediaRequestIdRef,
     remoteStreamRef,
     callIdRef,
     peerRef,
@@ -111,7 +124,12 @@ export function useCall({
       const callId = callIdRef.current;
       const target = peerRef.current;
       if (callId && target && statusRef.current !== "idle") {
-        socket.emit("call:sync", { callId, to: target.id, from: currentUserId });
+        socket.emit("call:sync", {
+          callId,
+          to: target.id,
+          from: currentUserId,
+          callType: callTypeRef.current,
+        });
       }
     };
 
@@ -145,12 +163,12 @@ export function useCall({
     media.updateStatus("connecting");
 
     try {
-      await getRtcConfiguration();
+      await getRtcConfiguration(true);
       const stream = await media.getLocalMedia(type);
       const pc = media.createPeerConnection(from, callId);
       stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
-      socket.emit("call:accept", { callId, to: from, from: currentUserId });
+      socket.emit("call:accept", { callId, to: from, from: currentUserId, callType: type });
     } catch (err) {
       console.error("Failed to get local media:", err);
       socket.emit("call:reject", { callId, to: from, from: currentUserId });

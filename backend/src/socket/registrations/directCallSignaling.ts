@@ -27,13 +27,13 @@ export function registerDirectCallSignaling(
     const signal = await parseDirectCallSignal(socket, data, "call:offer");
     if (!signal || signal.role !== "caller") return;
     if (!(await redisClient.get(`callconnected:${signal.callId}`))) {
-      emitUnavailable(socket, signal.callId, "stale");
+      emitUnavailable(socket, signal.callId, "stale", signal.callType);
       return;
     }
 
     const body = requireRecord(data, "Call offer payload");
     if (!isRecord(body.offer)) {
-      emitUnavailable(socket, signal.callId, "invalid-offer");
+      emitUnavailable(socket, signal.callId, "invalid-offer", signal.callType);
       return;
     }
 
@@ -41,6 +41,7 @@ export function registerDirectCallSignaling(
       callId: signal.callId,
       to: signal.to,
       from: userId,
+      callType: signal.callType,
       offer: body.offer,
     });
   });
@@ -49,13 +50,13 @@ export function registerDirectCallSignaling(
     const signal = await parseDirectCallSignal(socket, data, "call:answer");
     if (!signal || signal.role !== "receiver") return;
     if (!(await redisClient.get(`callconnected:${signal.callId}`))) {
-      emitUnavailable(socket, signal.callId, "stale");
+      emitUnavailable(socket, signal.callId, "stale", signal.callType);
       return;
     }
 
     const body = requireRecord(data, "Call answer payload");
     if (!isRecord(body.answer)) {
-      emitUnavailable(socket, signal.callId, "invalid-answer");
+      emitUnavailable(socket, signal.callId, "invalid-answer", signal.callType);
       return;
     }
 
@@ -63,6 +64,7 @@ export function registerDirectCallSignaling(
       callId: signal.callId,
       to: signal.to,
       from: userId,
+      callType: signal.callType,
       answer: body.answer,
     });
   });
@@ -71,13 +73,13 @@ export function registerDirectCallSignaling(
     const signal = await parseDirectCallSignal(socket, data, "call:ice-candidate");
     if (!signal) return;
     if (!(await redisClient.get(`callconnected:${signal.callId}`))) {
-      emitUnavailable(socket, signal.callId, "stale");
+      emitUnavailable(socket, signal.callId, "stale", signal.callType);
       return;
     }
 
     const body = requireRecord(data, "Call candidate payload");
     if (!isRecord(body.candidate)) {
-      emitUnavailable(socket, signal.callId, "invalid-candidate");
+      emitUnavailable(socket, signal.callId, "invalid-candidate", signal.callType);
       return;
     }
 
@@ -85,6 +87,7 @@ export function registerDirectCallSignaling(
       callId: signal.callId,
       to: signal.to,
       from: userId,
+      callType: signal.callType,
       candidate: body.candidate,
     });
   });
@@ -98,17 +101,24 @@ export function registerDirectCallSignaling(
       const caller = await redisClient.get(`call:${callId}:caller`);
       const receiver = await redisClient.get(`call:${callId}:receiver`);
 
+      const storedType = await redisClient.get(`call:${callId}:type`);
+      const callType = storedType === "video" ? "video" : "audio";
+
       if (
         !role ||
         !caller ||
         !receiver ||
         getDirectCallCounterpart({ caller, receiver }, role) !== to
       ) {
-        emitUnavailable(socket, callId, "stale");
+        emitUnavailable(socket, callId, "stale", callType);
         return;
       }
 
-      const owner = await redisClient.get(directCallOwnerKey(callId, role));
+      const ownerKey = directCallOwnerKey(callId, role);
+      const owner = await redisClient.get(ownerKey);
+      if (owner && !io.sockets.sockets.get(owner)) {
+        await redisClient.set(ownerKey, socket.id);
+      }
       const ready = await redisClient.get(`callready:${callId}`);
       const accepted = await redisClient.get(`callconnected:${callId}`);
       const status = ready
@@ -121,7 +131,14 @@ export function registerDirectCallSignaling(
 
       socket.emit(
         "call:state",
-        makeState(callId, status, userId, owner === socket.id ? "sync" : "stale-socket"),
+        makeState(
+          callId,
+          status,
+          userId,
+          owner === socket.id || !(owner && io.sockets.sockets.get(owner)) ? "sync" : "stale-socket",
+          undefined,
+          callType,
+        ),
       );
     } catch (error) {
       console.error("call:sync error:", error);

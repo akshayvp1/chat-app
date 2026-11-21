@@ -37,6 +37,7 @@ export interface GroupCallSessionParams {
   callTypeRef: RefObject<GroupCallType | null>;
   localStreamRef: RefObject<MediaStream | null>;
   mediaPromiseRef: RefObject<Promise<MediaStream> | null>;
+  mediaRequestIdRef: RefObject<number>;
   pcMapRef: RefObject<Map<string, RTCPeerConnection>>;
   pendingCandidatesRef: RefObject<Map<string, RTCIceCandidateInit[]>>;
   activeCallsRef: RefObject<Map<string, ActiveGroupCall>>;
@@ -73,6 +74,7 @@ export function useGroupCallSession({
   callTypeRef,
   localStreamRef,
   mediaPromiseRef,
+  mediaRequestIdRef,
   pcMapRef,
   pendingCandidatesRef,
   activeCallsRef,
@@ -111,10 +113,10 @@ export function useGroupCallSession({
 
   const disposeMedia = useCallback(() => {
     disposeMediaResources(
-      { localStreamRef, mediaPromiseRef },
+      { localStreamRef, mediaPromiseRef, mediaRequestIdRef },
       { pcMapRef, pendingCandidatesRef }
     );
-  }, [localStreamRef, mediaPromiseRef, pcMapRef, pendingCandidatesRef]);
+  }, [localStreamRef, mediaPromiseRef, mediaRequestIdRef, pcMapRef, pendingCandidatesRef]);
 
   useEffect(
     () => () => {
@@ -126,8 +128,8 @@ export function useGroupCallSession({
 
   const getLocalMedia = useCallback(
     (type: GroupCallType) =>
-      requestLocalMedia(type, { localStreamRef, mediaPromiseRef }, setLocalStream),
-    [setLocalStream, localStreamRef, mediaPromiseRef]
+      requestLocalMedia(type, { localStreamRef, mediaPromiseRef, mediaRequestIdRef }, setLocalStream),
+    [setLocalStream, localStreamRef, mediaPromiseRef, mediaRequestIdRef]
   );
 
   const untrackActiveGroupCall = useCallback((gid: string) => {

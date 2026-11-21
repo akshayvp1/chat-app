@@ -41,6 +41,7 @@ export function useGroupCall({
   const callTypeRef = useRef<GroupCallType | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const mediaPromiseRef = useRef<Promise<MediaStream> | null>(null);
+  const mediaRequestIdRef = useRef(0);
   const pcMapRef = useRef<Map<string, RTCPeerConnection>>(new Map());
   const pendingCandidatesRef = useRef<Map<string, RTCIceCandidateInit[]>>(new Map());
   const activeCallsRef = useRef<Map<string, ActiveGroupCall>>(new Map());
@@ -66,6 +67,7 @@ export function useGroupCall({
     callTypeRef,
     localStreamRef,
     mediaPromiseRef,
+    mediaRequestIdRef,
     pcMapRef,
     pendingCandidatesRef,
     activeCallsRef,

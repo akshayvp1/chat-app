@@ -21,9 +21,11 @@ export default function SidebarHeader({
 }: SidebarHeaderProps) {
   return (
     <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-3 sm:px-4 sm:py-4 dark:border-border">
-      <div className="flex min-w-0 items-center gap-2">
-        <AppLogo className="h-8" />
-        <span className="truncate text-sm font-bold tracking-wide text-foreground">OLAM</span>
+      <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
+        <AppLogo className="h-9 shrink-0 sm:h-10" />
+        <span className="truncate text-base font-extrabold uppercase leading-none tracking-[0.12em] text-foreground sm:text-lg">
+          OLAM
+        </span>
       </div>
 
       <div className="flex shrink-0 items-center gap-1">

@@ -36,6 +36,7 @@ export default function CallModal({
   const remoteAudioRef = useStreamRef<HTMLAudioElement>(remoteStream);
 
   const remoteHasVideo = useHasLiveVideo(remoteStream);
+  const localHasVideo = useHasLiveVideo(localStream);
 
   if (status === "idle") return null;
 
@@ -130,13 +131,15 @@ export default function CallModal({
                 </div>
               )}
 
-              <video
-                ref={localRef}
-                autoPlay
-                playsInline
-                muted
-                className="absolute bottom-20 right-3 h-36 w-24 -scale-x-100 rounded-xl border-2 border-white bg-black object-cover shadow-lg sm:bottom-24 sm:right-4 sm:h-52 sm:w-40"
-              />
+              {localHasVideo && (
+                <video
+                  ref={localRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="absolute bottom-20 right-3 h-36 w-24 -scale-x-100 rounded-xl border-2 border-white bg-black object-cover shadow-lg sm:bottom-24 sm:right-4 sm:h-52 sm:w-40"
+                />
+              )}
 
               <div className="absolute left-1/2 top-3 max-w-[calc(100%-1.5rem)] -translate-x-1/2 truncate rounded-full bg-black/40 px-3 py-1.5 text-sm font-semibold sm:top-4 sm:px-4">
                 {peerName}

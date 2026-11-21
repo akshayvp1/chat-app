@@ -4,6 +4,7 @@ import type { CallType } from "../types/callTypes";
 export interface MediaRefs {
   localStreamRef: RefObject<MediaStream | null>;
   mediaPromiseRef: RefObject<Promise<MediaStream> | null>;
+  mediaRequestIdRef?: RefObject<number>;
 }
 
 export interface ConnectionRefs {
@@ -12,31 +13,81 @@ export interface ConnectionRefs {
   pendingCandidatesRef?: RefObject<Map<string, RTCIceCandidateInit[]>>;
 }
 
-export function getLocalMedia(type: CallType, refs: MediaRefs, setLocalStream: (stream: MediaStream | null) => void): Promise<MediaStream> {
-  if (refs.localStreamRef.current) {
-    return Promise.resolve(refs.localStreamRef.current);
+function streamHasRequiredTracks(stream: MediaStream, type: CallType): boolean {
+  const hasAudio = stream.getAudioTracks().some((track) => track.readyState === "live");
+  const hasVideo = stream.getVideoTracks().some((track) => track.readyState === "live");
+  return hasAudio && (type === "audio" || hasVideo);
+}
+
+function stopStream(stream: MediaStream | null): void {
+  stream?.getTracks().forEach((track) => track.stop());
+}
+
+export function getLocalMedia(
+  type: CallType,
+  refs: MediaRefs,
+  setLocalStream: (stream: MediaStream | null) => void,
+): Promise<MediaStream> {
+  const current = refs.localStreamRef.current;
+  if (current && streamHasRequiredTracks(current, type)) {
+    return Promise.resolve(current);
+  }
+  if (current) {
+    stopStream(current);
+    refs.localStreamRef.current = null;
+    setLocalStream(null);
   }
   if (refs.mediaPromiseRef.current) return refs.mediaPromiseRef.current;
 
-  const promise = navigator.mediaDevices
-    .getUserMedia({ audio: true, video: type === "video" })
-    .then((stream) => {
-      refs.localStreamRef.current = stream;
-      setLocalStream(stream);
+  if (refs.mediaRequestIdRef) {
+    refs.mediaRequestIdRef.current += 1;
+  }
+  const requestId = refs.mediaRequestIdRef?.current ?? 0;
+
+  const promise: Promise<MediaStream> = (async () => {
+    let stream: MediaStream | null = null;
+
+    if (navigator.mediaDevices?.getUserMedia) {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+          video: type === "video",
+        });
+      } catch (error) {
+        if (type !== "video") throw error;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        } catch {
+          throw error;
+        }
+      }
+    }
+
+    if (!stream) throw new Error("Media devices are unavailable");
+
+    if (refs.mediaRequestIdRef && refs.mediaRequestIdRef.current !== requestId) {
+      stopStream(stream);
+      throw new Error("Media request cancelled");
+    }
+
+    refs.localStreamRef.current = stream;
+    setLocalStream(stream);
+    return stream;
+  })().finally(() => {
+    if (refs.mediaPromiseRef.current === promise) {
       refs.mediaPromiseRef.current = null;
-      return stream;
-    })
-    .catch((err) => {
-      refs.mediaPromiseRef.current = null;
-      throw err;
-    });
+    }
+  });
 
   refs.mediaPromiseRef.current = promise;
   return promise;
 }
 
 export function stopLocalTracks(refs: MediaRefs): void {
-  refs.localStreamRef.current?.getTracks().forEach((track) => track.stop());
+  if (refs.mediaRequestIdRef) {
+    refs.mediaRequestIdRef.current += 1;
+  }
+  stopStream(refs.localStreamRef.current);
   refs.localStreamRef.current = null;
   refs.mediaPromiseRef.current = null;
 }

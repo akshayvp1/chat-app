@@ -13,6 +13,7 @@ export interface DirectCallStatePayload {
   callId: string;
   status: DirectCallUIStatus;
   from: string;
+  callType?: "audio" | "video";
   reason?: string;
   originSocketId?: string;
   at: number;

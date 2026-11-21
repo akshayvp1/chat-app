@@ -88,6 +88,7 @@ export function useCallSignaling({
       callId: incomingCall.callId,
       to: incomingCall.from,
       from: currentUserId,
+      callType: incomingCall.type,
     });
     finishCall("rejected");
   }, [callIdRef, currentUserId, finishCall, incomingCall]);
@@ -102,19 +103,19 @@ export function useCallSignaling({
 
     const status = statusRef.current;
     if (isCallerRef.current && status === "calling") {
-      socket.emit("call:cancel", { callId, to: target.id, from: currentUserId });
+      socket.emit("call:cancel", { callId, to: target.id, from: currentUserId, callType: callTypeRef.current });
       finishCall("missed");
       return;
     }
     if (!isCallerRef.current && status === "ringing") {
-      socket.emit("call:reject", { callId, to: target.id, from: currentUserId });
+      socket.emit("call:reject", { callId, to: target.id, from: currentUserId, callType: callTypeRef.current });
       finishCall("rejected");
       return;
     }
 
-    socket.emit("call:end", { callId, to: target.id, from: currentUserId });
+    socket.emit("call:end", { callId, to: target.id, from: currentUserId, callType: callTypeRef.current });
     finishCall("ended");
-  }, [callIdRef, currentUserId, finishCall, isCallerRef, peerRef, statusRef]);
+  }, [callIdRef, callTypeRef, currentUserId, finishCall, isCallerRef, peerRef, statusRef]);
 
   useCallEventHandlers({
     currentUserId,
@@ -123,8 +124,9 @@ export function useCallSignaling({
     getLocalMedia,
     createPeerConnection,
     finishCall,
-    endCall,
     setIncomingCall,
+    setCallType,
+    setPeer,
   });
 
   return { startCall, rejectCall, endCall };

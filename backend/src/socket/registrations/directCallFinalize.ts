@@ -34,8 +34,11 @@ export async function finalizeCall(
 
     const callerId = String((call as any).callerId?._id ?? (call as any).callerId);
     const receiverId = String((call as any).receiverId?._id ?? (call as any).receiverId);
+    const storedType = await redisClient.get(`call:${callId}:type`);
+    const callType = storedType === "video" ? "video" : "audio";
 
     await redisClient.del(`call:${callId}`);
+    await redisClient.del(`call:${callId}:type`);
     await redisClient.del(`call:${callId}:caller`);
     await redisClient.del(`call:${callId}:receiver`);
     await redisClient.del(`call:${callId}:callerSocket`);
@@ -49,6 +52,7 @@ export async function finalizeCall(
       callId,
       status: status === "completed" ? "ended" : status,
       from: actorId ?? "server",
+      callType,
       originSocketId,
       at: Date.now(),
     });
