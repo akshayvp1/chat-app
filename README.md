@@ -18,7 +18,7 @@ Set environment variables in `backend/.env` (see `backend/.env.example`):
 - `PORT`, `CLIENT_URL`, `MONGO_URI`
 - `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `ACCESS_TOKEN_EXPIRES`, `REFRESH_TOKEN_EXPIRES`
 - `EMAIL_USER`, `EMAIL_PASS`
-- `REDIS_HOST`, `REDIS_PORT`
+- `REDIS_URL` in production, or `REDIS_HOST`, `REDIS_PORT` for local development
 - `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` (required for file/profile uploads)
 
 ### Frontend
@@ -46,4 +46,5 @@ npm run dev
 
 - Set `CLIENT_URL` and all backend secrets (including Cloudinary credentials) in your deployment environment.
 - Set frontend `VITE_API_BASE_URL=https://<backend>/api` and `VITE_SOCKET_URL=https://<backend>`.
+- The frontend static site needs a Rewrite rule: Source `/*`, Destination `/index.html`, Action `Rewrite` (configured in `render.yaml`). This lets React Router handle direct navigation and page refreshes on `/login` and `/chat`.
 - No persistent local disk is required for Cloudinary uploads.

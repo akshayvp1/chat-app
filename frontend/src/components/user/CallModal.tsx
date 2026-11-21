@@ -11,6 +11,12 @@ const BRAND_COLOR = "#8065E8";
 const AVATAR_CLASS =
   "flex h-20 w-20 animate-pulse items-center justify-center rounded-full text-2xl font-bold sm:h-24 sm:w-24";
 
+const TERMINAL_TEXT: Record<string, string> = {
+  rejected: "Call declined",
+  ended: "Call ended",
+  missed: "Missed call",
+};
+
 export default function CallModal({
   status,
   callType,
@@ -71,6 +77,27 @@ export default function CallModal({
             className="flex h-12 w-12 items-center justify-center rounded-full bg-red-500 transition-colors hover:bg-red-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:h-14 sm:w-14"
             title="Cancel call"
             aria-label="Cancel call"
+          >
+            <PhoneOff className="h-6 w-6" />
+          </button>
+        </div>
+      )}
+
+      {status === "connecting" && (
+        <div className="flex max-w-full flex-col items-center gap-5 px-2 text-center sm:gap-6">
+          <div className={AVATAR_CLASS} style={{ backgroundColor: BRAND_COLOR }}>
+            {initials}
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-lg font-bold sm:text-xl">{peerName}</p>
+            <p className="mt-1 text-sm text-[#C9BFFF]">Connecting...</p>
+          </div>
+          <button
+            type="button"
+            onClick={onEnd}
+            className="flex h-12 w-12 items-center justify-center rounded-full bg-red-500 transition-colors hover:bg-red-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:h-14 sm:w-14"
+            title="End call"
+            aria-label="End call"
           >
             <PhoneOff className="h-6 w-6" />
           </button>
@@ -138,6 +165,21 @@ export default function CallModal({
             onToggleCamera={onToggleCamera}
             onEnd={onEnd}
           />
+        </div>
+      )}
+
+      {TERMINAL_TEXT[status] && (
+        <div className="flex max-w-full flex-col items-center gap-4 px-2 text-center">
+          <div
+            className="flex h-20 w-20 items-center justify-center rounded-full"
+            style={{ backgroundColor: BRAND_COLOR }}
+          >
+            <PhoneOff className="h-8 w-8" />
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-lg font-bold sm:text-xl">{peerName}</p>
+            <p className="mt-1 text-sm text-[#C9BFFF]">{TERMINAL_TEXT[status]}</p>
+          </div>
         </div>
       )}
     </div>

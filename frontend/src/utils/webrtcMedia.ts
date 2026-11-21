@@ -46,6 +46,9 @@ function closeSimplePeerConnection(pc: RTCPeerConnection | null): void {
   pc.onicecandidate = null;
   pc.ontrack = null;
   pc.onconnectionstatechange = null;
+  pc.oniceconnectionstatechange = null;
+  pc.onicegatheringstatechange = null;
+  pc.onsignalingstatechange = null;
   pc.close();
 }
 
@@ -54,6 +57,9 @@ export function closePeerConnection(pc: RTCPeerConnection): void {
   pc.onicecandidate = null;
   pc.ontrack = null;
   pc.onconnectionstatechange = null;
+  pc.oniceconnectionstatechange = null;
+  pc.onicegatheringstatechange = null;
+  pc.onsignalingstatechange = null;
   pc.getSenders().forEach((sender) => {
     try {
       pc.removeTrack(sender);

@@ -1,79 +1,26 @@
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import type { RefObject } from "react";
-import type { CallStatus, CallType, IncomingCall } from "../types/callTypes";
+import type {
+  CallStatus,
+  CallType,
+  DirectCallTerminalStatus,
+  IncomingCall,
+} from "../types/callTypes";
+import { createPeerConnection } from "./peerConnection";
+import type { EmitCandidate } from "./peerConnection";
 import {
   disposeMedia as disposeMediaResources,
   getLocalMedia as requestLocalMedia,
 } from "./webrtcMedia";
 import type { MediaRefs } from "./webrtcMedia";
 
+export { createPeerConnection, flushIceCandidates } from "./peerConnection";
+export type { PeerConnectionHandlers } from "./peerConnection";
+export { createGroupPeerConnection } from "./webrtcGroup";
+export type { GroupPeerConnectionOptions } from "./webrtcGroup";
 export { closePeerConnection, disposeMedia, getLocalMedia, stopLocalTracks } from "./webrtcMedia";
+export { getRtcConfiguration, preloadRtcConfiguration } from "./rtcConfig";
 export type { ConnectionRefs, MediaRefs } from "./webrtcMedia";
-
-export const ICE_SERVERS: RTCConfiguration = {
-  iceServers: [
-    { urls: "stun:stun.l.google.com:19302" },
-    // TURN goes here. Without it, a real share of calls connect and
-    // then show black video.
-  ],
-};
-
-export interface PeerConnectionHandlers {
-  onCandidate: (candidate: RTCIceCandidate) => void;
-  onTrack: (event: RTCTrackEvent) => void;
-  onConnectionChange?: (state: RTCPeerConnectionState) => void;
-}
-
-export function createPeerConnection(handlers: PeerConnectionHandlers): RTCPeerConnection {
-  const pc = new RTCPeerConnection(ICE_SERVERS);
-
-  pc.onicecandidate = (event) => {
-    if (event.candidate) handlers.onCandidate(event.candidate);
-  };
-  pc.ontrack = (event) => handlers.onTrack(event);
-  pc.onconnectionstatechange = () => {
-    handlers.onConnectionChange?.(pc.connectionState);
-  };
-
-  return pc;
-}
-
-export async function flushIceCandidates(pc: RTCPeerConnection, candidates: RTCIceCandidateInit[]): Promise<void> {
-  for (const candidate of candidates) {
-    await pc.addIceCandidate(new RTCIceCandidate(candidate));
-  }
-}
-
-type EmitCandidate = (callId: string, to: string, candidate: RTCIceCandidate) => void;
-
-export interface GroupPeerConnectionOptions {
-  peerId: string;
-  callId: string;
-  pcMapRef: RefObject<Map<string, RTCPeerConnection>>;
-  localStreamRef: RefObject<MediaStream | null>;
-  emitCandidate: EmitCandidate;
-  onTrack: (peerId: string, stream: MediaStream) => void;
-  onConnectionLost: (peerId: string) => void;
-}
-
-export function createGroupPeerConnection(options: GroupPeerConnectionOptions): RTCPeerConnection {
-  const { peerId, callId, pcMapRef, localStreamRef, emitCandidate, onTrack, onConnectionLost } = options;
-  const existing = pcMapRef.current.get(peerId);
-  if (existing) return existing;
-
-  const pc = createPeerConnection({
-    onCandidate: (candidate) => emitCandidate(callId, peerId, candidate),
-    onTrack: (event) => onTrack(peerId, event.streams[0]),
-    onConnectionChange: (state) => {
-      if (state === "failed" || state === "closed") onConnectionLost(peerId);
-    },
-  });
-
-  const localStream = localStreamRef.current;
-  localStream?.getTracks().forEach((track) => pc.addTrack(track, localStream));
-  pcMapRef.current.set(peerId, pc);
-  return pc;
-}
 
 export interface UseDirectCallMediaParams extends MediaRefs {
   pcRef: RefObject<RTCPeerConnection | null>;
@@ -94,6 +41,8 @@ export interface UseDirectCallMediaParams extends MediaRefs {
   setIsMuted: (muted: boolean) => void;
   setIsCameraOff: (off: boolean) => void;
   emitCandidate: EmitCandidate;
+  emitConnected: (callId: string, to: string) => void;
+  emitNetworkFailure: (callId: string, to: string) => void;
 }
 
 export interface DirectCallMedia {
@@ -101,6 +50,8 @@ export interface DirectCallMedia {
   disposeMedia: () => void;
   getLocalMedia: (type: CallType) => Promise<MediaStream>;
   cleanupCall: (notify?: boolean) => void;
+  finishCall: (status: DirectCallTerminalStatus, reason?: string) => void;
+  markConnected: () => void;
   createPeerConnection: (to: string, callId: string) => RTCPeerConnection;
 }
 
@@ -115,13 +66,26 @@ export function useDirectCallMedia({
   setIncomingCall, setLocalStream,
   setRemoteStream, setIsMuted,
   setIsCameraOff, emitCandidate,
+  emitConnected, emitNetworkFailure,
 }: UseDirectCallMediaParams): DirectCallMedia {
+  const terminalTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const networkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const connectedNotifiedRef = useRef(false);
+
   const updateStatus = useCallback((next: CallStatus) => {
     statusRef.current = next;
     setStatus(next);
   }, [statusRef, setStatus]);
 
+  const clearCallTimers = useCallback(() => {
+    if (terminalTimerRef.current) clearTimeout(terminalTimerRef.current);
+    if (networkTimerRef.current) clearTimeout(networkTimerRef.current);
+    terminalTimerRef.current = null;
+    networkTimerRef.current = null;
+  }, []);
+
   const disposeCallMedia = useCallback(() => {
+    clearCallTimers();
     disposeMediaResources({ localStreamRef, mediaPromiseRef }, { pcRef });
     remoteStreamRef.current = null;
     callIdRef.current = null;
@@ -129,9 +93,11 @@ export function useDirectCallMedia({
     callTypeRef.current = null;
     isCallerRef.current = false;
     pendingCandidatesRef.current = [];
+    connectedNotifiedRef.current = false;
   }, [
     callIdRef,
     callTypeRef,
+    clearCallTimers,
     isCallerRef,
     localStreamRef,
     mediaPromiseRef,
@@ -140,28 +106,70 @@ export function useDirectCallMedia({
     pendingCandidatesRef,
     remoteStreamRef,
   ]);
+
+  const resetCallState = useCallback(() => {
+    setLocalStream(null);
+    setRemoteStream(null);
+    setCallType(null);
+    setPeer(null);
+    setIncomingCall(null);
+    setIsMuted(false);
+    setIsCameraOff(false);
+  }, [setCallType, setIncomingCall, setIsCameraOff, setIsMuted, setLocalStream, setPeer, setRemoteStream]);
+
   const cleanupCall = useCallback(
     (notify = true) => {
       disposeCallMedia();
-      setLocalStream(null);
-      setRemoteStream(null);
+      resetCallState();
       updateStatus("idle");
-      setCallType(null);
-      setPeer(null);
-      setIncomingCall(null);
-      setIsMuted(false);
-      setIsCameraOff(false);
       if (notify) onCallEndedRef.current?.();
     },
-    [disposeCallMedia, updateStatus, setLocalStream, setRemoteStream, setCallType, setPeer, setIncomingCall, setIsMuted, setIsCameraOff, onCallEndedRef]
+    [disposeCallMedia, onCallEndedRef, resetCallState, updateStatus]
   );
+
+  const finishCall = useCallback(
+    (status: DirectCallTerminalStatus) => {
+      if (terminalTimerRef.current) return;
+      disposeCallMedia();
+      resetCallState();
+      updateStatus(status);
+      terminalTimerRef.current = setTimeout(() => {
+        terminalTimerRef.current = null;
+        updateStatus("idle");
+        onCallEndedRef.current?.();
+      }, 1400);
+    },
+    [disposeCallMedia, onCallEndedRef, resetCallState, updateStatus]
+  );
+
+  const markConnected = useCallback(() => {
+    if (connectedNotifiedRef.current) return;
+    connectedNotifiedRef.current = true;
+    if (networkTimerRef.current) {
+      clearTimeout(networkTimerRef.current);
+      networkTimerRef.current = null;
+    }
+    updateStatus("connected");
+    const callId = callIdRef.current;
+    const peer = peerRef.current;
+    if (callId && peer) emitConnected(callId, peer.id);
+  }, [callIdRef, emitConnected, peerRef, updateStatus]);
+
   const getLocalMediaForCall = useCallback(
     (type: CallType) =>
       requestLocalMedia(type, { localStreamRef, mediaPromiseRef }, setLocalStream),
     [setLocalStream, localStreamRef, mediaPromiseRef]
   );
+
   const createCallPeerConnection = useCallback(
     (to: string, currentCallId: string) => {
+      const fail = () => {
+        const id = callIdRef.current;
+        const peer = peerRef.current;
+        if (id && peer) emitNetworkFailure(id, peer.id);
+        finishCall("ended");
+      };
+
       const pc = createPeerConnection({
         onCandidate: (candidate) => emitCandidate(currentCallId, to, candidate),
         onTrack: (event) => {
@@ -173,13 +181,30 @@ export function useDirectCallMedia({
           setRemoteStream(new MediaStream(stream.getTracks()));
         },
         onConnectionChange: (state) => {
-          if (state === "disconnected" || state === "failed") cleanupCall();
+          if (state === "connected") {
+            markConnected();
+          } else if (state === "failed" || state === "closed") {
+            fail();
+          } else if (state === "disconnected") {
+            if (networkTimerRef.current) clearTimeout(networkTimerRef.current);
+            networkTimerRef.current = setTimeout(fail, 6000);
+          }
         },
       });
       pcRef.current = pc;
       return pc;
     },
-    [emitCandidate, cleanupCall, setRemoteStream, pcRef, remoteStreamRef]
+    [
+      callIdRef,
+      emitCandidate,
+      emitNetworkFailure,
+      finishCall,
+      markConnected,
+      pcRef,
+      peerRef,
+      remoteStreamRef,
+      setRemoteStream,
+    ]
   );
 
   return {
@@ -187,6 +212,8 @@ export function useDirectCallMedia({
     disposeMedia: disposeCallMedia,
     getLocalMedia: getLocalMediaForCall,
     cleanupCall,
+    finishCall,
+    markConnected,
     createPeerConnection: createCallPeerConnection,
   };
 }

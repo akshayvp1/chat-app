@@ -1,6 +1,7 @@
 import { Server, Socket } from "socket.io";
 import redisClient from "../../config/redis";
 import GroupCallService from "../../services/groupCallService";
+import { directCallOwnerKey, getCallParticipants } from "../helpers";
 import { leavePresence } from "../presence";
 import { clearRingingTimer, DirectCallStatus } from "../state";
 import { clearSocketTyping } from "../typing";
@@ -8,6 +9,8 @@ import { clearSocketTyping } from "../typing";
 export type FinalizeCall = (
   callId: string,
   status: DirectCallStatus,
+  originSocketId?: string,
+  actorId?: string,
 ) => Promise<void>;
 
 export type FinalizeGroupCall = (
@@ -23,18 +26,31 @@ export interface DisconnectDependencies {
 
 async function cleanupDirectCall(
   io: Server,
+  socket: Socket,
   userId: string,
   finalizeCall: FinalizeCall,
 ): Promise<void> {
   try {
     const activeCallId = await redisClient.get(`activecall:${userId}`);
-    if (activeCallId) {
-      clearRingingTimer(activeCallId);
-      const wasConnected = await redisClient.get(`callconnected:${activeCallId}`);
-      const finalStatus: DirectCallStatus = wasConnected ? "completed" : "missed";
-      await finalizeCall(activeCallId, finalStatus);
-      io.emit("call:ended", { callId: activeCallId });
-    }
+    if (!activeCallId) return;
+
+    const participants = await getCallParticipants(activeCallId);
+    if (!participants) return;
+
+    const role = userId === participants.caller ? "caller" : "receiver";
+    const owner = await redisClient.get(directCallOwnerKey(activeCallId, role));
+    if (owner && owner !== socket.id) return;
+
+    clearRingingTimer(activeCallId);
+    const wasConnected = await redisClient.get(`callconnected:${activeCallId}`);
+    const finalStatus: DirectCallStatus = wasConnected ? "completed" : "missed";
+    const counterpart = role === "caller" ? participants.receiver : participants.caller;
+
+    await finalizeCall(activeCallId, finalStatus, socket.id, userId);
+    io.to(counterpart).emit("call:ended", {
+      callId: activeCallId,
+      from: userId,
+    });
   } catch (error) {
     console.error("disconnect call cleanup error:", error);
   }
@@ -93,7 +109,7 @@ export function registerDisconnectCleanup(
     const wasLastSocket = await leavePresence(io, userId, socket.id);
     if (!wasLastSocket) return;
 
-    await cleanupDirectCall(io, userId, finalizeCall);
+    await cleanupDirectCall(io, socket, userId, finalizeCall);
     await cleanupGroupCall(io, userId, groupCallService, finalizeGroupCall);
     await clearActiveCall(userId);
   });

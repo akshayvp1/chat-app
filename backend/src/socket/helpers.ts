@@ -66,15 +66,64 @@ export async function isCallSignalingAuthorized(
   callId: string,
   to: string,
 ): Promise<boolean> {
+  return (await authorizeDirectCallSignal(userId, callId, to)) !== null;
+}
+
+export type DirectCallRole = "caller" | "receiver";
+
+export function directCallOwnerKey(callId: string, role: DirectCallRole): string {
+  return `call:${callId}:${role}Socket`;
+}
+
+export async function getDirectCallRole(
+  userId: string,
+  callId: string,
+): Promise<DirectCallRole | null> {
   const participants = await getCallParticipants(callId);
-  if (!participants) {
-    return false;
+  if (!participants) return null;
+  if (userId === participants.caller) return "caller";
+  if (userId === participants.receiver) return "receiver";
+  return null;
+}
+
+export function getDirectCallCounterpart(
+  participants: { caller: string; receiver: string },
+  role: DirectCallRole,
+): string {
+  return role === "caller" ? participants.receiver : participants.caller;
+}
+
+export async function authorizeDirectCallSignal(
+  userId: string,
+  callId: string,
+  to: string,
+  socketId?: string,
+): Promise<DirectCallRole | null> {
+  const participants = await getCallParticipants(callId);
+  if (!participants) return null;
+
+  const role = await getDirectCallRole(userId, callId);
+  if (!role) return null;
+  if (getDirectCallCounterpart(participants, role) !== to) return null;
+
+  const owner = await redisClient.get(directCallOwnerKey(callId, role));
+  if (owner && socketId && owner !== socketId) return null;
+
+  return role;
+}
+
+export async function clearStaleActiveCall(userId: string): Promise<void> {
+  try {
+    const callId = await redisClient.get(`activecall:${userId}`);
+    if (callId && !(await redisClient.get(`call:${callId}`))) {
+      await redisClient.del(`activecall:${userId}`);
+    }
+  } catch (error) {
+    console.error("stale active call cleanup error:", error);
   }
-  if (userId === participants.caller) {
-    return to === participants.receiver;
-  }
-  if (userId === participants.receiver) {
-    return to === participants.caller;
-  }
-  return false;
+}
+
+export async function hasActiveDirectCall(userId: string): Promise<boolean> {
+  await clearStaleActiveCall(userId);
+  return Boolean(await redisClient.get(`activecall:${userId}`));
 }

@@ -5,6 +5,7 @@ import groupRouter from "./groupRouter";
 import callRouter from "./callRoutes";
 import groupCallRoutes from "./groupCallRoutes";
 import uploadRoutes from "./uploadRoutes";
+import rtcConfigRoutes from "./rtcConfigRoutes";
 
 const router = express.Router();
 
@@ -14,5 +15,6 @@ router.use("/group", groupRouter);
 router.use("/call", callRouter);
 router.use("/group-call", groupCallRoutes);
 router.use("/upload", uploadRoutes);
+router.use("/rtc-config", rtcConfigRoutes);
 
 export default router;

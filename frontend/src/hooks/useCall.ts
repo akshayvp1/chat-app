@@ -6,7 +6,7 @@ import {
   startOutgoingRingback,
   stopRingtone,
 } from "../utils/ringtone";
-import { useDirectCallMedia } from "../utils/webrtc";
+import { getRtcConfiguration, useDirectCallMedia } from "../utils/webrtc";
 import { useCallSignaling } from "./useCallSignaling";
 
 export type { CallStatus, CallType } from "../types/callTypes";
@@ -49,8 +49,20 @@ export function useCall({
 
   const emitCandidate = useCallback(
     (callId: string, to: string, candidate: RTCIceCandidate) =>
-      socket.emit("call:ice-candidate", { callId, to, candidate }),
-    []
+      socket.emit("call:ice-candidate", { callId, to, from: currentUserId, candidate }),
+    [currentUserId]
+  );
+
+  const emitConnected = useCallback(
+    (callId: string, to: string) =>
+      socket.emit("call:connected", { callId, to, from: currentUserId }),
+    [currentUserId]
+  );
+
+  const emitNetworkFailure = useCallback(
+    (callId: string, to: string) =>
+      socket.emit("call:end", { callId, to, from: currentUserId, reason: "network" }),
+    [currentUserId]
   );
 
   const media = useDirectCallMedia({
@@ -74,7 +86,11 @@ export function useCall({
     setIsMuted,
     setIsCameraOff,
     emitCandidate,
+    emitConnected,
+    emitNetworkFailure,
   });
+
+  const { disposeMedia, finishCall } = media;
 
   useEffect(() => {
     if (status === "ringing") startIncomingRingtone(callType ?? "audio");
@@ -85,13 +101,37 @@ export function useCall({
   useEffect(
     () => () => {
       stopRingtone("direct");
-      media.disposeMedia();
+      disposeMedia();
     },
-    [media]
+    [disposeMedia]
   );
 
+  useEffect(() => {
+    const onConnect = () => {
+      const callId = callIdRef.current;
+      const target = peerRef.current;
+      if (callId && target && statusRef.current !== "idle") {
+        socket.emit("call:sync", { callId, to: target.id, from: currentUserId });
+      }
+    };
+
+    const onDisconnect = () => {
+      if (callIdRef.current && statusRef.current !== "idle") {
+        finishCall("ended");
+      }
+    };
+
+    socket.on("connect", onConnect);
+    socket.on("disconnect", onDisconnect);
+
+    return () => {
+      socket.off("connect", onConnect);
+      socket.off("disconnect", onDisconnect);
+    };
+  }, [currentUserId, finishCall]);
+
   const acceptCall = useCallback(async () => {
-    if (!incomingCall) return;
+    if (!incomingCall || statusRef.current !== "ringing") return;
     const { callId, from, fromName, type } = incomingCall;
 
     isCallerRef.current = false;
@@ -102,9 +142,10 @@ export function useCall({
     setCallType(type);
     setPeer({ id: from, name: fromName });
     setIncomingCall(null);
-    media.updateStatus("connected");
+    media.updateStatus("connecting");
 
     try {
+      await getRtcConfiguration();
       const stream = await media.getLocalMedia(type);
       const pc = media.createPeerConnection(from, callId);
       stream.getTracks().forEach((track) => pc.addTrack(track, stream));
@@ -113,9 +154,9 @@ export function useCall({
     } catch (err) {
       console.error("Failed to get local media:", err);
       socket.emit("call:reject", { callId, to: from, from: currentUserId });
-      media.cleanupCall();
+      finishCall("rejected");
     }
-  }, [incomingCall, currentUserId, media]);
+  }, [currentUserId, finishCall, incomingCall, media]);
 
   const toggleMute = useCallback(() => {
     setIsMuted((prev) => {

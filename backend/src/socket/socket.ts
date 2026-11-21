@@ -1,9 +1,7 @@
 import { Server, Socket } from "socket.io";
 import { authenticateSocket } from "./auth";
-import {
-  finalizeCall,
-  registerDirectCallListeners,
-} from "./registrations/directCalls";
+import { finalizeCall } from "./registrations/directCallFinalize";
+import { registerDirectCallListeners } from "./registrations/directCalls";
 import { registerDisconnectCleanup } from "./registrations/disconnect";
 import {
   finalizeGroupCall,
@@ -48,8 +46,21 @@ export const initializeSocket = (io: Server) => {
     registerGroupCallListeners(io, socket, userId, groupService, groupCallService);
     registerDisconnectCleanup(io, socket, userId, {
       groupCallService,
-      finalizeCall: (callId: string, status: DirectCallStatus) =>
-        finalizeCall(io, callService, chatService, callId, status),
+      finalizeCall: (
+        callId: string,
+        status: DirectCallStatus,
+        originSocketId?: string,
+        actorId?: string,
+      ) =>
+        finalizeCall(
+          io,
+          callService,
+          chatService,
+          callId,
+          status,
+          originSocketId,
+          actorId,
+        ),
       finalizeGroupCall: (callId: string, groupId: string) =>
         finalizeGroupCall(io, groupCallService, groupService, callId, groupId),
     });

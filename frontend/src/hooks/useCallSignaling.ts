@@ -35,15 +35,20 @@ export function useCallSignaling({
   } = refs;
   const {
     updateStatus,
-    disposeMedia,
     getLocalMedia,
     createPeerConnection,
-    cleanupCall,
+    finishCall,
   } = media;
 
   const startCall = useCallback(
     (to: string, toName: string, type: CallType) => {
-      const newCallId = `${currentUserId}_${to}_${Date.now()}`;
+      if (statusRef.current !== "idle" || callIdRef.current) return;
+
+      const suffix =
+        typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? crypto.randomUUID().slice(0, 8)
+          : Math.random().toString(36).slice(2, 10);
+      const newCallId = `call_${currentUserId}_${to}_${Date.now()}_${suffix}`;
 
       isCallerRef.current = true;
       callIdRef.current = newCallId;
@@ -52,7 +57,7 @@ export function useCallSignaling({
 
       setCallType(type);
       setPeer({ id: to, name: toName });
-      media.updateStatus("calling");
+      updateStatus("calling");
 
       socket.emit("call:initiate", {
         callId: newCallId,
@@ -63,57 +68,53 @@ export function useCallSignaling({
       });
     },
     [
-      currentUserId,
-      currentUserName,
-      setCallType,
-      setPeer,
-      media,
       callIdRef,
       callTypeRef,
+      currentUserId,
+      currentUserName,
       isCallerRef,
       peerRef,
+      setCallType,
+      setPeer,
+      statusRef,
+      updateStatus,
     ]
   );
 
   const rejectCall = useCallback(() => {
-    if (!incomingCall) return;
+    if (!incomingCall || incomingCall.callId !== callIdRef.current) return;
+
     socket.emit("call:reject", {
       callId: incomingCall.callId,
       to: incomingCall.from,
       from: currentUserId,
     });
-    setIncomingCall(null);
-    updateStatus("idle");
-    disposeMedia();
-  }, [
-    incomingCall,
-    currentUserId,
-    updateStatus,
-    disposeMedia,
-    setIncomingCall,
-  ]);
+    finishCall("rejected");
+  }, [callIdRef, currentUserId, finishCall, incomingCall]);
 
   const endCall = useCallback(() => {
-    if (callIdRef.current && peerRef.current) {
-      const event =
-        isCallerRef.current && statusRef.current === "calling"
-          ? "call:cancel"
-          : "call:end";
-      socket.emit(event, {
-        callId: callIdRef.current,
-        to: peerRef.current.id,
-        from: currentUserId,
-      });
+    const callId = callIdRef.current;
+    const target = peerRef.current;
+    if (!callId || !target) {
+      finishCall("ended");
+      return;
     }
-    cleanupCall();
-  }, [
-    currentUserId,
-    cleanupCall,
-    callIdRef,
-    isCallerRef,
-    peerRef,
-    statusRef,
-  ]);
+
+    const status = statusRef.current;
+    if (isCallerRef.current && status === "calling") {
+      socket.emit("call:cancel", { callId, to: target.id, from: currentUserId });
+      finishCall("missed");
+      return;
+    }
+    if (!isCallerRef.current && status === "ringing") {
+      socket.emit("call:reject", { callId, to: target.id, from: currentUserId });
+      finishCall("rejected");
+      return;
+    }
+
+    socket.emit("call:end", { callId, to: target.id, from: currentUserId });
+    finishCall("ended");
+  }, [callIdRef, currentUserId, finishCall, isCallerRef, peerRef, statusRef]);
 
   useCallEventHandlers({
     currentUserId,
@@ -121,7 +122,7 @@ export function useCallSignaling({
     updateStatus,
     getLocalMedia,
     createPeerConnection,
-    cleanupCall,
+    finishCall,
     endCall,
     setIncomingCall,
   });

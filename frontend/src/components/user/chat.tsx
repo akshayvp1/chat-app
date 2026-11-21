@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppDispatch, useAppSelector } from "../../redux/hooks";
 import { useCall } from "../../hooks/useCall";
+import { preloadRtcConfiguration } from "../../utils/webrtc";
 import { useGroupCall } from "../../hooks/useGroupCall";
 import { useDirectChatSocket } from "../../hooks/useDirectChatSocket";
 import { useChatSettings } from "../../hooks/useChatSettings";
@@ -37,6 +38,10 @@ export default function Chat() {
 
   const [historyVersion, setHistoryVersion] = useState(0);
   const [isGroupCallMinimized, setIsGroupCallMinimized] = useState(false);
+
+  useEffect(() => {
+    preloadRtcConfiguration();
+  }, []);
 
   // ─────────────────────────────────────────────────────────────
   // 1-to-1 Calling

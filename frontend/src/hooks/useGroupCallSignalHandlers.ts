@@ -6,7 +6,7 @@ import type {
   IncomingGroupCall,
   ParticipantState,
 } from "../types/callTypes";
-import { flushIceCandidates } from "../utils/webrtc";
+import { flushIceCandidates, getRtcConfiguration } from "../utils/webrtc";
 
 type JoinCall = (callId: string, groupId: string, type: GroupCallType, opts?: { minimized?: boolean }) => Promise<void>;
 type CreatePeerConnection = (peerId: string, callId: string) => RTCPeerConnection;
@@ -97,6 +97,7 @@ export function createGroupCallSignalHandlers({
     callId: string;
     participants: { userId: string; userName: string }[];
   }) {
+    await getRtcConfiguration();
     if (callTypeRef.current) await getLocalMedia(callTypeRef.current);
 
     for (const p of data.participants) {
@@ -136,6 +137,7 @@ export function createGroupCallSignalHandlers({
     offer: RTCSessionDescriptionInit;
   }) {
     try {
+      await getRtcConfiguration();
       if (callTypeRef.current) await getLocalMedia(callTypeRef.current);
 
       const pc = createPeerConnection(data.from, data.callId);

@@ -1,9 +1,15 @@
 import { useEffect } from "react";
 import type { RefObject } from "react";
 import { socket } from "../socket/socket";
-import type { CallStatus, CallType, IncomingCall } from "../types/callTypes";
+import type {
+  CallStatus,
+  CallType,
+  DirectCallSignalEvent,
+  DirectCallStateEvent,
+  IncomingCall,
+} from "../types/callTypes";
 import type { DirectCallMedia } from "../utils/webrtc";
-import { flushIceCandidates } from "../utils/webrtc";
+import { flushIceCandidates, getRtcConfiguration } from "../utils/webrtc";
 
 export interface CallSignalingRefs {
   statusRef: RefObject<CallStatus>;
@@ -21,7 +27,7 @@ export interface UseCallEventHandlersParams {
   updateStatus: DirectCallMedia["updateStatus"];
   getLocalMedia: DirectCallMedia["getLocalMedia"];
   createPeerConnection: DirectCallMedia["createPeerConnection"];
-  cleanupCall: DirectCallMedia["cleanupCall"];
+  finishCall: DirectCallMedia["finishCall"];
   endCall: () => void;
   setIncomingCall: (call: IncomingCall | null) => void;
 }
@@ -32,75 +38,79 @@ export function useCallEventHandlers({
   updateStatus,
   getLocalMedia,
   createPeerConnection,
-  cleanupCall,
+  finishCall,
   endCall,
   setIncomingCall,
 }: UseCallEventHandlersParams): void {
-  const {
-    statusRef,
-    peerRef,
-    callTypeRef,
-    callIdRef,
-    pcRef,
-    pendingCandidates,
-  } = refs;
+  const { statusRef, isCallerRef, peerRef, callTypeRef, callIdRef, pcRef, pendingCandidates } = refs;
 
   useEffect(() => {
+    const isCurrentCall = (callId?: string): boolean =>
+      Boolean(callId) && callId === callIdRef.current;
+
+    const isFromPeer = (from?: string): boolean =>
+      Boolean(from) && from === peerRef.current?.id;
+
     function onIncoming(data: IncomingCall) {
-      if (statusRef.current !== "idle") {
-        socket.emit("call:reject", {
-          callId: data.callId,
-          to: data.from,
-          from: currentUserId,
-          reason: "busy",
-        });
-        return;
-      }
+      if (statusRef.current !== "idle" || callIdRef.current) return;
+      if (!data?.callId || !data.from || !data.type) return;
+
+      callIdRef.current = data.callId;
+      peerRef.current = { id: data.from, name: data.fromName };
+      callTypeRef.current = data.type;
       setIncomingCall(data);
       updateStatus("ringing");
     }
 
-    async function onAccepted(data: { callId: string; from: string }) {
-      if (!peerRef.current || !callTypeRef.current) return;
-      try {
-        /**
-         * Flip to "connected" FIRST so CallModal mounts its <video>
-         * elements before any stream exists. This is the blank-video fix
-         * on the caller side; the accepter already did it in this order,
-         * which is why only the caller was affected.
-         */
-        updateStatus("connected");
+    async function onAccepted(data: DirectCallSignalEvent) {
+      if (!isCallerRef.current || !isCurrentCall(data.callId) || !isFromPeer(data.from)) return;
+      if (pcRef.current || !callTypeRef.current) return;
 
+      try {
+        updateStatus("connecting");
+        await getRtcConfiguration();
         const stream = await getLocalMedia(callTypeRef.current);
+        if (!isCurrentCall(data.callId) || pcRef.current) return;
+
         const pc = createPeerConnection(data.from, data.callId);
-        stream.getTracks().forEach((t) => pc.addTrack(t, stream));
+        stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
+        if (!isCurrentCall(data.callId)) return;
 
-        socket.emit("call:offer", { callId: data.callId, to: data.from, offer });
+        socket.emit("call:offer", {
+          callId: data.callId,
+          to: data.from,
+          from: currentUserId,
+          offer,
+        });
       } catch (err) {
         console.error("Failed to start offer:", err);
         endCall();
       }
     }
 
-    async function onOffer(data: { offer: RTCSessionDescriptionInit }) {
+    async function onOffer(data: DirectCallSignalEvent) {
+      if (isCallerRef.current || !isCurrentCall(data.callId) || !isFromPeer(data.from)) return;
+      if (!data.offer) return;
+
       const pc = pcRef.current;
-      if (!pc || !peerRef.current) return;
+      if (!pc || pc.signalingState !== "stable") return;
 
       try {
         await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-
-        await flushIceCandidates(pc, pendingCandidates.current);
+        const queued = pendingCandidates.current.slice();
         pendingCandidates.current = [];
+        await flushIceCandidates(pc, queued);
+        if (!isCurrentCall(data.callId)) return;
 
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
-
         socket.emit("call:answer", {
-          callId: callIdRef.current,
-          to: peerRef.current.id,
+          callId: data.callId,
+          to: data.from,
+          from: currentUserId,
           answer,
         });
       } catch (err) {
@@ -108,39 +118,86 @@ export function useCallEventHandlers({
       }
     }
 
-    async function onAnswer(data: { answer: RTCSessionDescriptionInit }) {
+    async function onAnswer(data: DirectCallSignalEvent) {
+      if (!isCallerRef.current || !isCurrentCall(data.callId) || !isFromPeer(data.from)) return;
+      if (!data.answer) return;
+
       const pc = pcRef.current;
-      if (!pc) return;
+      if (!pc || pc.signalingState !== "have-local-offer") return;
+
       try {
         await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
-        await flushIceCandidates(pc, pendingCandidates.current);
+        const queued = pendingCandidates.current.slice();
         pendingCandidates.current = [];
+        await flushIceCandidates(pc, queued);
       } catch (err) {
         console.error("Failed to apply answer:", err);
       }
     }
 
-    async function onIceCandidate(data: { candidate: RTCIceCandidateInit }) {
+    async function onIceCandidate(data: DirectCallSignalEvent) {
+      if (!isCurrentCall(data.callId) || !isFromPeer(data.from) || !data.candidate) return;
+
       const pc = pcRef.current;
       if (pc?.remoteDescription) {
         try {
           await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
         } catch (err) {
-          console.error("Failed to add ICE candidate:", err);
+          console.warn("Failed to add ICE candidate:", err);
         }
-      } else {
+        return;
+      }
+
+      if (pendingCandidates.current.length < 100) {
         pendingCandidates.current.push(data.candidate);
       }
     }
 
-    function onRejected() { cleanupCall(); }
-    function onCancelled() { cleanupCall(); }
-    function onEnded() { cleanupCall(); }
-    function onUnavailable(data?: { callId?: string }) {
-      if (!data?.callId || data.callId === callIdRef.current) cleanupCall();
-    }
-    function onTimeout() {
-      cleanupCall();
+    const terminalHandler =
+      (status: "rejected" | "missed" | "ended") =>
+      (data?: { callId?: string }) => {
+        if (isCurrentCall(data?.callId)) finishCall(status);
+      };
+
+    const onRejected = terminalHandler("rejected");
+    const onCancelled = terminalHandler("missed");
+    const onEnded = terminalHandler("ended");
+    const onTimeout = terminalHandler("missed");
+    const onUnavailable = terminalHandler("missed");
+
+    function onState(data: DirectCallStateEvent) {
+      if (!data?.callId || !isCurrentCall(data.callId)) return;
+      if (data.originSocketId === socket.id) return;
+
+      switch (data.status) {
+        case "connecting":
+          if (statusRef.current === "ringing" && !pcRef.current) {
+            setIncomingCall(null);
+            callIdRef.current = null;
+            peerRef.current = null;
+            callTypeRef.current = null;
+            updateStatus("idle");
+            break;
+          }
+          if (statusRef.current === "calling" || statusRef.current === "ringing") {
+            updateStatus("connecting");
+          }
+          break;
+        case "connected":
+          if (statusRef.current === "connecting") updateStatus("connected");
+          break;
+        case "rejected":
+          finishCall("rejected");
+          break;
+        case "ended":
+          finishCall("ended");
+          break;
+        case "missed":
+          finishCall("missed");
+          break;
+        default:
+          break;
+      }
     }
 
     socket.on("call:incoming", onIncoming);
@@ -148,6 +205,7 @@ export function useCallEventHandlers({
     socket.on("call:offer", onOffer);
     socket.on("call:answer", onAnswer);
     socket.on("call:ice-candidate", onIceCandidate);
+    socket.on("call:state", onState);
     socket.on("call:rejected", onRejected);
     socket.on("call:cancelled", onCancelled);
     socket.on("call:ended", onEnded);
@@ -160,6 +218,7 @@ export function useCallEventHandlers({
       socket.off("call:offer", onOffer);
       socket.off("call:answer", onAnswer);
       socket.off("call:ice-candidate", onIceCandidate);
+      socket.off("call:state", onState);
       socket.off("call:rejected", onRejected);
       socket.off("call:cancelled", onCancelled);
       socket.off("call:ended", onEnded);
@@ -167,18 +226,19 @@ export function useCallEventHandlers({
       socket.off("call:timeout", onTimeout);
     };
   }, [
-    currentUserId,
-    endCall,
-    getLocalMedia,
-    createPeerConnection,
-    cleanupCall,
-    updateStatus,
     callIdRef,
     callTypeRef,
+    createPeerConnection,
+    currentUserId,
+    endCall,
+    finishCall,
+    getLocalMedia,
+    isCallerRef,
     pcRef,
     peerRef,
     pendingCandidates,
     setIncomingCall,
     statusRef,
+    updateStatus,
   ]);
 }
