@@ -10,5 +10,6 @@ export async function fetchRtcConfiguration(): Promise<RTCIceServer[]> {
     data: RtcConfigResponse;
   }>("/rtc-config");
 
-  return response.data.data.iceServers;
+  const iceServers = response.data?.data?.iceServers;
+  return Array.isArray(iceServers) ? iceServers : [];
 }

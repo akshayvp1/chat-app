@@ -1,7 +1,7 @@
 import { fetchRtcConfiguration } from "../services/user/rtcConfigService";
 
 const FALLBACK_CONFIGURATION: RTCConfiguration = {
-  iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+  iceServers: [{ urls: "stun:stun.relay.metered.ca:80" }],
 };
 const CONFIG_TTL_MS = 20 * 60 * 1000;
 
