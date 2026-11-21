@@ -137,7 +137,7 @@ export function registerGroupCallListeners(
       const type = requireCallType(body.type);
       const group = await getMemberGroup(groupService, groupId, userId);
 
-      if (!group) { socket.emit("call:unavailable", { callId }); return; }
+      if (!group) { socket.emit("group_call:unavailable", { callId }); return; }
 
       const existingCallId = await redisClient.get(`activegroupcall:${groupId}`);
       if (existingCallId) {
@@ -164,7 +164,7 @@ export function registerGroupCallListeners(
       setGroupRingingTimer(callId, timer);
     } catch (error) {
       console.error("group_call:initiate error:", error);
-      socket.emit("call:unavailable", fallbackCallId ? { callId: fallbackCallId } : {});
+      socket.emit("group_call:unavailable", fallbackCallId ? { callId: fallbackCallId } : {});
     }
   });
 
@@ -178,11 +178,11 @@ export function registerGroupCallListeners(
       const userName = boundedString(body.userName, "Display name", 1, 50);
       const group = await getMemberGroup(groupService, groupId, userId);
 
-      if (!group) { socket.emit("call:unavailable", { callId }); return; }
+      if (!group) { socket.emit("group_call:unavailable", { callId }); return; }
 
       const dbId = await redisClient.get(`groupcall:${callId}`);
       const activeCallId = await redisClient.get(`activegroupcall:${groupId}`);
-      if (!dbId || activeCallId !== callId) { socket.emit("call:unavailable", { callId }); return; }
+      if (!dbId || activeCallId !== callId) { socket.emit("group_call:unavailable", { callId }); return; }
 
       clearGroupRingingTimer(callId);
 
@@ -213,7 +213,7 @@ export function registerGroupCallListeners(
       io.to(`group:${groupId}`).except(userId).emit("group_call:user-joined", { callId, userId, userName });
     } catch (error) {
       console.error("group_call:join error:", error);
-      socket.emit("call:unavailable", fallbackCallId ? { callId: fallbackCallId } : {});
+      socket.emit("group_call:unavailable", fallbackCallId ? { callId: fallbackCallId } : {});
     }
   });
 

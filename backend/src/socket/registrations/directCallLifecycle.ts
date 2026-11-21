@@ -99,7 +99,7 @@ export function registerDirectCallLifecycle(
   });
 
   socket.on("call:accept", async (data: unknown) => {
-    const signal = await parseDirectCallSignal(socket, data, "call:accept");
+    const signal = await parseDirectCallSignal(io, socket, data, "call:accept");
     if (!signal || signal.role !== "receiver") return;
     if (await redisClient.get(`callconnected:${signal.callId}`)) return;
 
@@ -143,7 +143,7 @@ export function registerDirectCallLifecycle(
   });
 
   socket.on("call:connected", async (data: unknown) => {
-    const signal = await parseDirectCallSignal(socket, data, "call:connected");
+    const signal = await parseDirectCallSignal(io, socket, data, "call:connected");
     if (!signal || !(await redisClient.get(`callconnected:${signal.callId}`))) return;
 
     clearConnectTimer(signal.callId);
@@ -157,7 +157,7 @@ export function registerDirectCallLifecycle(
   });
 
   socket.on("call:reject", async (data: unknown) => {
-    const signal = await parseDirectCallSignal(socket, data, "call:reject");
+    const signal = await parseDirectCallSignal(io, socket, data, "call:reject");
     if (!signal || signal.role !== "receiver") return;
     if (await redisClient.get(`callconnected:${signal.callId}`)) return;
 
@@ -175,8 +175,9 @@ export function registerDirectCallLifecycle(
   });
 
   socket.on("call:cancel", async (data: unknown) => {
-    const signal = await parseDirectCallSignal(socket, data, "call:cancel");
+    const signal = await parseDirectCallSignal(io, socket, data, "call:cancel");
     if (!signal || signal.role !== "caller") return;
+    if (await redisClient.get(`callconnected:${signal.callId}`)) return;
 
     clearRingingTimer(signal.callId);
     await finalizeCall(
@@ -192,7 +193,7 @@ export function registerDirectCallLifecycle(
   });
 
   socket.on("call:end", async (data: unknown) => {
-    const signal = await parseDirectCallSignal(socket, data, "call:end");
+    const signal = await parseDirectCallSignal(io, socket, data, "call:end");
     if (!signal) return;
 
     clearRingingTimer(signal.callId);

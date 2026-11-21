@@ -63,6 +63,11 @@ export interface ActiveGroupCall {
   startedAt: number;
 }
 
+export interface MediaAvailability {
+  audio: boolean;
+  video: boolean;
+}
+
 export interface CallModalProps {
   status: CallStatus;
   callType: CallType | null;
@@ -72,6 +77,7 @@ export interface CallModalProps {
   isMuted: boolean;
   isCameraOff: boolean;
   facingMode?: "user" | "environment";
+  mediaUnavailable?: MediaAvailability;
   onAccept: () => void;
   onReject: () => void;
   onEnd: () => void;

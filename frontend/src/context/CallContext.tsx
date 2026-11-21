@@ -65,6 +65,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
             isMuted={call.isMuted}
             isCameraOff={call.isCameraOff}
             facingMode={call.facingMode}
+            mediaUnavailable={call.mediaUnavailable}
             onAccept={call.acceptCall}
             onReject={call.rejectCall}
             onEnd={call.endCall}

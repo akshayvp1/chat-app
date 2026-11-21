@@ -98,6 +98,7 @@ export async function authorizeDirectCallSignal(
   callId: string,
   to: string,
   socketId?: string,
+  io?: Server,
 ): Promise<DirectCallRole | null> {
   const participants = await getCallParticipants(callId);
   if (!participants) return null;
@@ -106,8 +107,12 @@ export async function authorizeDirectCallSignal(
   if (!role) return null;
   if (getDirectCallCounterpart(participants, role) !== to) return null;
 
-  const owner = await redisClient.get(directCallOwnerKey(callId, role));
-  if (owner && socketId && owner !== socketId) return null;
+  const ownerKey = directCallOwnerKey(callId, role);
+  const owner = await redisClient.get(ownerKey);
+  if (owner && socketId && owner !== socketId) {
+    if (io?.sockets.sockets.get(owner)) return null;
+    await redisClient.set(ownerKey, socketId);
+  }
 
   return role;
 }

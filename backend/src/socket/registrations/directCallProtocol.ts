@@ -1,4 +1,4 @@
-import type { Socket } from "socket.io";
+import type { Server, Socket } from "socket.io";
 import redisClient from "../../config/redis";
 import {
   requireCallId,
@@ -40,6 +40,7 @@ export function emitUnavailable(
 }
 
 export async function parseDirectCallSignal(
+  io: Server,
   socket: Socket,
   data: unknown,
   label: string,
@@ -53,6 +54,7 @@ export async function parseDirectCallSignal(
       callId,
       to,
       socket.id,
+      io,
     );
     if (!role) {
       emitUnavailable(socket, callId, "stale");

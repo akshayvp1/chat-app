@@ -24,7 +24,7 @@ export function registerDirectCallSignaling(
   userId: string,
 ): void {
   socket.on("call:offer", async (data: unknown) => {
-    const signal = await parseDirectCallSignal(socket, data, "call:offer");
+    const signal = await parseDirectCallSignal(io, socket, data, "call:offer");
     if (!signal || signal.role !== "caller") return;
     if (!(await redisClient.get(`callconnected:${signal.callId}`))) {
       emitUnavailable(socket, signal.callId, "stale", signal.callType);
@@ -47,7 +47,7 @@ export function registerDirectCallSignaling(
   });
 
   socket.on("call:answer", async (data: unknown) => {
-    const signal = await parseDirectCallSignal(socket, data, "call:answer");
+    const signal = await parseDirectCallSignal(io, socket, data, "call:answer");
     if (!signal || signal.role !== "receiver") return;
     if (!(await redisClient.get(`callconnected:${signal.callId}`))) {
       emitUnavailable(socket, signal.callId, "stale", signal.callType);
@@ -70,7 +70,7 @@ export function registerDirectCallSignaling(
   });
 
   socket.on("call:ice-candidate", async (data: unknown) => {
-    const signal = await parseDirectCallSignal(socket, data, "call:ice-candidate");
+    const signal = await parseDirectCallSignal(io, socket, data, "call:ice-candidate");
     if (!signal) return;
     if (!(await redisClient.get(`callconnected:${signal.callId}`))) {
       emitUnavailable(socket, signal.callId, "stale", signal.callType);
@@ -89,6 +89,21 @@ export function registerDirectCallSignaling(
       from: userId,
       callType: signal.callType,
       candidate: body.candidate,
+    });
+  });
+
+  socket.on("call:ice-restart", async (data: unknown) => {
+    const signal = await parseDirectCallSignal(io, socket, data, "call:ice-restart");
+    if (!signal || signal.role !== "receiver") return;
+    if (!(await redisClient.get(`callconnected:${signal.callId}`))) {
+      emitUnavailable(socket, signal.callId, "stale", signal.callType);
+      return;
+    }
+
+    io.to(signal.to).emit("call:ice-restart", {
+      callId: signal.callId,
+      from: userId,
+      callType: signal.callType,
     });
   });
 
@@ -128,6 +143,10 @@ export function registerDirectCallSignaling(
           : role === "caller"
             ? "calling"
             : "ringing";
+
+      if (role === "caller" && accepted && !ready) {
+        socket.emit("call:accepted", { callId, from: receiver, callType });
+      }
 
       socket.emit(
         "call:state",

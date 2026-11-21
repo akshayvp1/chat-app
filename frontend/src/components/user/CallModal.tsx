@@ -27,6 +27,7 @@ export default function CallModal({
   isMuted,
   isCameraOff,
   facingMode,
+  mediaUnavailable,
   onAccept,
   onReject,
   onEnd,
@@ -193,6 +194,16 @@ export default function CallModal({
               <div className="pointer-events-none absolute left-1/2 top-3 max-w-[calc(100%-1.5rem)] -translate-x-1/2 truncate rounded-full bg-black/40 px-3 py-1.5 text-sm font-semibold sm:top-4 sm:px-4">
                 {swapped && localHasVideo ? "You" : peerName}
               </div>
+
+              {(mediaUnavailable?.audio || mediaUnavailable?.video) && (
+                <div className="pointer-events-none absolute left-1/2 top-14 max-w-[calc(100%-1.5rem)] -translate-x-1/2 truncate rounded-full bg-black/55 px-3 py-1 text-xs text-white sm:top-16">
+                  {mediaUnavailable.video && mediaUnavailable.audio
+                    ? "Camera and microphone unavailable"
+                    : mediaUnavailable.video
+                      ? "Camera unavailable — audio only"
+                      : "Microphone unavailable — video only"}
+                </div>
+              )}
 
               <CallControls
                 variant="overlay"

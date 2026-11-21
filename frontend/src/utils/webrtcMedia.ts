@@ -5,6 +5,13 @@ export interface MediaRefs {
   localStreamRef: RefObject<MediaStream | null>;
   mediaPromiseRef: RefObject<Promise<MediaStream> | null>;
   mediaRequestIdRef?: RefObject<number>;
+  audioUnavailableRef?: RefObject<boolean>;
+  videoUnavailableRef?: RefObject<boolean>;
+}
+
+export interface LocalMediaOptions {
+  allowDeviceFallback?: boolean;
+  onUnavailable?: (audioUnavailable: boolean, videoUnavailable: boolean) => void;
 }
 
 export interface ConnectionRefs {
@@ -13,10 +20,17 @@ export interface ConnectionRefs {
   pendingCandidatesRef?: RefObject<Map<string, RTCIceCandidateInit[]>>;
 }
 
-function streamHasRequiredTracks(stream: MediaStream, type: CallType): boolean {
+function streamHasRequiredTracks(
+  stream: MediaStream,
+  type: CallType,
+  audioUnavailable: boolean,
+  videoUnavailable: boolean,
+): boolean {
   const hasAudio = stream.getAudioTracks().some((track) => track.readyState === "live");
   const hasVideo = stream.getVideoTracks().some((track) => track.readyState === "live");
-  return hasAudio && (type === "audio" || hasVideo);
+  if (!hasAudio && !hasVideo) return false;
+  if (type === "audio") return hasAudio;
+  return (hasAudio || audioUnavailable) && (hasVideo || videoUnavailable);
 }
 
 function stopStream(stream: MediaStream | null): void {
@@ -27,9 +41,24 @@ export function getLocalMedia(
   type: CallType,
   refs: MediaRefs,
   setLocalStream: (stream: MediaStream | null) => void,
+  options: LocalMediaOptions = {},
 ): Promise<MediaStream> {
+  const setUnavailable = (audioUnavailable: boolean, videoUnavailable: boolean) => {
+    if (refs.audioUnavailableRef) refs.audioUnavailableRef.current = audioUnavailable;
+    if (refs.videoUnavailableRef) refs.videoUnavailableRef.current = videoUnavailable;
+    options.onUnavailable?.(audioUnavailable, videoUnavailable);
+  };
+
   const current = refs.localStreamRef.current;
-  if (current && streamHasRequiredTracks(current, type)) {
+  if (
+    current &&
+    streamHasRequiredTracks(
+      current,
+      type,
+      Boolean(refs.audioUnavailableRef?.current),
+      Boolean(refs.videoUnavailableRef?.current),
+    )
+  ) {
     return Promise.resolve(current);
   }
   if (current) {
@@ -45,19 +74,40 @@ export function getLocalMedia(
   const requestId = refs.mediaRequestIdRef?.current ?? 0;
 
   const promise: Promise<MediaStream> = (async () => {
-    let stream: MediaStream | null = null;
+    let stream: MediaStream;
 
-    if (navigator.mediaDevices?.getUserMedia) {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error("Media devices are unavailable");
+    }
+
+    if (options.allowDeviceFallback) {
+      setUnavailable(false, false);
+    }
+
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: type === "video",
+      });
+    } catch (error) {
+      if (type !== "video" || !options.allowDeviceFallback) throw error;
+
       try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-          video: type === "video",
-        });
-      } catch (error) {
-        if (type === "video") {
-          throw new Error("Camera access is required for a video call", { cause: error });
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        setUnavailable(false, true);
+      } catch {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: false,
+            video: { facingMode: { ideal: "user" } },
+          });
+          setUnavailable(true, false);
+        } catch {
+          setUnavailable(false, false);
+          throw new Error("Microphone and camera access are unavailable for this call", {
+            cause: error,
+          });
         }
-        throw error;
       }
     }
 
@@ -65,6 +115,7 @@ export function getLocalMedia(
 
     if (refs.mediaRequestIdRef && refs.mediaRequestIdRef.current !== requestId) {
       stopStream(stream);
+      setUnavailable(false, false);
       throw new Error("Media request cancelled");
     }
 
@@ -88,6 +139,8 @@ export function stopLocalTracks(refs: MediaRefs): void {
   stopStream(refs.localStreamRef.current);
   refs.localStreamRef.current = null;
   refs.mediaPromiseRef.current = null;
+  if (refs.audioUnavailableRef) refs.audioUnavailableRef.current = false;
+  if (refs.videoUnavailableRef) refs.videoUnavailableRef.current = false;
 }
 
 function closeSimplePeerConnection(pc: RTCPeerConnection | null): void {

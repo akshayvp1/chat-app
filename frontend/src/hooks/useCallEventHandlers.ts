@@ -31,6 +31,7 @@ export interface UseCallEventHandlersParams {
   setIncomingCall: (call: IncomingCall | null) => void;
   setCallType: (type: CallType | null) => void;
   setPeer: (peer: { id: string; name: string } | null) => void;
+  restartIce: () => Promise<boolean>;
 }
 
 export function useCallEventHandlers({
@@ -43,6 +44,7 @@ export function useCallEventHandlers({
   setIncomingCall,
   setCallType,
   setPeer,
+  restartIce,
 }: UseCallEventHandlersParams): void {
   const { statusRef, isCallerRef, peerRef, callTypeRef, callIdRef, pcRef, pendingCandidates } = refs;
 
@@ -180,6 +182,11 @@ export function useCallEventHandlers({
       }
     }
 
+    function onIceRestartRequest(data: DirectCallSignalEvent) {
+      if (!isCallerRef.current || !isCurrentCall(data.callId) || !isFromPeer(data.from)) return;
+      void restartIce();
+    }
+
     const terminalHandler =
       (status: "rejected" | "missed" | "ended") =>
       (data?: { callId?: string }) => {
@@ -238,6 +245,7 @@ export function useCallEventHandlers({
     socket.on("call:offer", onOffer);
     socket.on("call:answer", onAnswer);
     socket.on("call:ice-candidate", onIceCandidate);
+    socket.on("call:ice-restart", onIceRestartRequest);
     socket.on("call:state", onState);
     socket.on("call:rejected", onRejected);
     socket.on("call:cancelled", onCancelled);
@@ -251,6 +259,7 @@ export function useCallEventHandlers({
       socket.off("call:offer", onOffer);
       socket.off("call:answer", onAnswer);
       socket.off("call:ice-candidate", onIceCandidate);
+      socket.off("call:ice-restart", onIceRestartRequest);
       socket.off("call:state", onState);
       socket.off("call:rejected", onRejected);
       socket.off("call:cancelled", onCancelled);
@@ -269,6 +278,7 @@ export function useCallEventHandlers({
     pcRef,
     peerRef,
     pendingCandidates,
+    restartIce,
     setCallType,
     setIncomingCall,
     setPeer,

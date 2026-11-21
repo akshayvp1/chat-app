@@ -60,7 +60,7 @@ export function useGroupCallSignaling({
     socket.on("group_call:answer", handlers.onAnswer);
     socket.on("group_call:ice-candidate", handlers.onIceCandidate);
     socket.on("group_call:ended", handlers.onEnded);
-    socket.on("call:unavailable", handlers.onUnavailable);
+    socket.on("group_call:unavailable", handlers.onUnavailable);
 
     return () => {
       socket.off("group_call:initiated", handlers.onInitiated);
@@ -73,7 +73,7 @@ export function useGroupCallSignaling({
       socket.off("group_call:answer", handlers.onAnswer);
       socket.off("group_call:ice-candidate", handlers.onIceCandidate);
       socket.off("group_call:ended", handlers.onEnded);
-      socket.off("call:unavailable", handlers.onUnavailable);
+      socket.off("group_call:unavailable", handlers.onUnavailable);
     };
   }, [
     currentUserId,

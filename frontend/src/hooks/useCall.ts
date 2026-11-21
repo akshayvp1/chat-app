@@ -32,9 +32,12 @@ export function useCall({
   const [isMuted, setIsMuted] = useState(false);
   const [isCameraOff, setIsCameraOff] = useState(false);
   const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
+  const [mediaUnavailable, setMediaUnavailable] = useState({ audio: false, video: false });
 
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const facingModeRef = useRef<"user" | "environment">("user");
+  const audioUnavailableRef = useRef(false);
+  const videoUnavailableRef = useRef(false);
   const localStreamRef = useRef<MediaStream | null>(null);
   const mediaPromiseRef = useRef<Promise<MediaStream> | null>(null);
   const mediaRequestIdRef = useRef(0);
@@ -76,7 +79,24 @@ export function useCall({
 
   const emitNetworkFailure = useCallback(
     (callId: string, to: string) =>
-      socket.emit("call:end", { callId, to, from: currentUserId, reason: "network" }),
+      socket.emit("call:end", {
+        callId,
+        to,
+        from: currentUserId,
+        callType: callTypeRef.current,
+        reason: "network",
+      }),
+    [currentUserId]
+  );
+
+  const emitIceRestartRequest = useCallback(
+    (callId: string, to: string) =>
+      socket.emit("call:ice-restart", {
+        callId,
+        to,
+        from: currentUserId,
+        callType: callTypeRef.current,
+      }),
     [currentUserId]
   );
 
@@ -97,6 +117,8 @@ export function useCall({
     localStreamRef,
     mediaPromiseRef,
     mediaRequestIdRef,
+    audioUnavailableRef,
+    videoUnavailableRef,
     remoteStreamRef,
     callIdRef,
     peerRef,
@@ -117,10 +139,12 @@ export function useCall({
     emitCandidate,
     emitConnected,
     emitNetworkFailure,
+    emitIceRestartRequest,
     emitOffer,
+    setMediaUnavailable,
   });
 
-  const { disposeMedia, finishCall } = media;
+  const { disposeMedia, finishCall, restartIce } = media;
 
   useEffect(() => {
     if (status === "ringing") startIncomingRingtone(callType ?? "audio");
@@ -179,9 +203,15 @@ export function useCall({
 
       socket.emit("call:accept", { callId, to: from, from: currentUserId, callType: type });
     } catch (err) {
-      console.error("Failed to get local media:", err);
-      socket.emit("call:reject", { callId, to: from, from: currentUserId });
-      finishCall("rejected");
+      console.error("Failed to start accepted call:", err);
+      socket.emit("call:end", {
+        callId,
+        to: from,
+        from: currentUserId,
+        callType: type,
+        reason: "media",
+      });
+      finishCall("ended");
     }
   }, [currentUserId, finishCall, incomingCall, media]);
 
@@ -272,6 +302,7 @@ export function useCall({
       pendingCandidates,
     },
     media,
+    restartIce,
   });
 
   return {
@@ -285,6 +316,7 @@ export function useCall({
     isMuted,
     isCameraOff,
     facingMode,
+    mediaUnavailable,
     startCall,
     acceptCall,
     rejectCall,

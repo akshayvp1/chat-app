@@ -14,6 +14,7 @@ export interface UseCallSignalingParams {
   setPeer: (peer: { id: string; name: string } | null) => void;
   refs: CallSignalingRefs;
   media: DirectCallMedia;
+  restartIce: () => Promise<boolean>;
 }
 
 export function useCallSignaling({
@@ -25,6 +26,7 @@ export function useCallSignaling({
   setPeer,
   refs,
   media,
+  restartIce,
 }: UseCallSignalingParams) {
   const {
     statusRef,
@@ -127,6 +129,7 @@ export function useCallSignaling({
     setIncomingCall,
     setCallType,
     setPeer,
+    restartIce,
   });
 
   return { startCall, rejectCall, endCall };
