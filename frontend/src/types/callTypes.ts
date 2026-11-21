@@ -71,11 +71,14 @@ export interface CallModalProps {
   remoteStream: MediaStream | null;
   isMuted: boolean;
   isCameraOff: boolean;
+  facingMode?: "user" | "environment";
   onAccept: () => void;
   onReject: () => void;
   onEnd: () => void;
   onToggleMute: () => void;
   onToggleCamera: () => void;
+  onSwitchCamera?: () => void;
+  onMinimize?: () => void;
 }
 
 export interface GroupCallModalProps {

@@ -11,6 +11,7 @@ export interface IGroupRepository {
   ): Promise<IGroup>;
 
   getGroupsForUser(userId: string): Promise<IGroup[]>;
+  getMemberGroupIds(userId: string, groupIds: string[]): Promise<string[]>;
   getGroupById(groupId: string): Promise<IGroup | null>;
   addMember(groupId: string, userId: string): Promise<void>;
   removeMember(groupId: string, userId: string): Promise<void>;
@@ -29,6 +30,11 @@ export interface IGroupRepository {
   ): Promise<IGroupMessage>;
 
   getGroupMessages(groupId: string): Promise<IGroupMessage[]>;
-  markGroupMessagesSeen(messageIds: string[], userId: string): Promise<void>;
+  countGroupMessages(groupId: string, messageIds: string[]): Promise<number>;
+  markGroupMessagesSeen(
+    messageIds: string[],
+    userId: string,
+    groupId?: string
+  ): Promise<void>;
   getUnreadCounts(userId: string): Promise<Record<string, number>>;
 }

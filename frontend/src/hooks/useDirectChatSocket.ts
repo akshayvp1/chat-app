@@ -63,6 +63,8 @@ export function useDirectChatSocket({
   const notificationPrefsRef = useRef(notificationPrefs);
   const callActiveRef = useRef(false);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const seenQueueRef = useRef<Map<string, Set<string>>>(new Map());
+  const seenFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const clearTypingTimer = useCallback(() => {
     if (typingTimeoutRef.current) {
@@ -70,6 +72,46 @@ export function useDirectChatSocket({
       typingTimeoutRef.current = null;
     }
   }, []);
+
+  const flushPendingSeen = useCallback(() => {
+    seenFlushTimerRef.current = null;
+
+    for (const [senderId, messageIds] of seenQueueRef.current) {
+      const queuedIds = [...messageIds].slice(0, 100);
+      if (queuedIds.length > 0) {
+        socket.emit("mark_seen", { messageIds: queuedIds, senderId });
+      }
+    }
+
+    seenQueueRef.current.clear();
+  }, []);
+
+  const queueSeen = useCallback(
+    (senderId: string, messageId: string) => {
+      let queuedIds = seenQueueRef.current.get(senderId);
+      if (!queuedIds) {
+        queuedIds = new Set<string>();
+        seenQueueRef.current.set(senderId, queuedIds);
+      }
+      queuedIds.add(messageId);
+
+      if (!seenFlushTimerRef.current) {
+        seenFlushTimerRef.current = setTimeout(flushPendingSeen, 300);
+      }
+    },
+    [flushPendingSeen],
+  );
+
+  useEffect(
+    () => () => {
+      if (seenFlushTimerRef.current) {
+        clearTimeout(seenFlushTimerRef.current);
+        seenFlushTimerRef.current = null;
+      }
+      seenQueueRef.current.clear();
+    },
+    [],
+  );
 
   useEffect(() => {
     selectedContactRef.current = selectedContact;
@@ -139,10 +181,7 @@ export function useDirectChatSocket({
       }
 
       if (contact && payload.senderId === contact._id) {
-        socket.emit("mark_seen", {
-          messageIds: [payload._id],
-          senderId: payload.senderId,
-        });
+        queueSeen(payload.senderId, payload._id);
       }
     }
 
@@ -234,6 +273,7 @@ export function useDirectChatSocket({
     clearTypingTimer,
     onOnlineUsers,
     onUserStatus,
+    queueSeen,
     requestOnlineUsers,
   ]);
 

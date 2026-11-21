@@ -23,6 +23,13 @@ class GroupService implements IGroupService {
     return await this.groupRepository.getGroupById(groupId);
   }
 
+  async getMemberGroupIds(
+    userId: string,
+    groupIds: string[]
+  ): Promise<string[]> {
+    return await this.groupRepository.getMemberGroupIds(userId, groupIds);
+  }
+
   async addMember(groupId: string, userId: string): Promise<void> {
     await this.groupRepository.addMember(groupId, userId);
   }
@@ -52,8 +59,19 @@ class GroupService implements IGroupService {
     return await this.groupRepository.getGroupMessages(groupId);
   }
 
-  async markGroupMessagesSeen(messageIds: string[], userId: string): Promise<void> {
-    await this.groupRepository.markGroupMessagesSeen(messageIds, userId);
+  async countGroupMessages(
+    groupId: string,
+    messageIds: string[]
+  ): Promise<number> {
+    return await this.groupRepository.countGroupMessages(groupId, messageIds);
+  }
+
+  async markGroupMessagesSeen(
+    messageIds: string[],
+    userId: string,
+    groupId?: string
+  ): Promise<void> {
+    await this.groupRepository.markGroupMessagesSeen(messageIds, userId, groupId);
   }
 
   async getUnreadCounts(userId: string): Promise<Record<string, number>> {

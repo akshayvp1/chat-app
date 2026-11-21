@@ -10,6 +10,12 @@ export interface IChatRepository {
   ): Promise<IMessage>;
   saveCallMessage(senderId: string, receiverId: string, call: ICallInfo): Promise<IMessage>;
   getMessages(userA: string, userB: string): Promise<IMessage[]>;
+  countMessagesForReceiver(
+    senderId: string,
+    receiverId: string,
+    messageIds: string[]
+  ): Promise<number>;
   markSeen(messageIds: string[]): Promise<void>;
+  markSeenForReceiver(messageIds: string[], receiverId: string): Promise<void>;
   getUnreadCounts(receiverId: string): Promise<Record<string, number>>;
 }

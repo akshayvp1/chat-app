@@ -1,3 +1,5 @@
+import { memo } from "react";
+
 import { BRAND_COLOR } from "../../../constants/brand";
 import type {
   MessageAttachment,
@@ -20,7 +22,7 @@ interface MessageBubbleProps {
   avatarColor?: string;
 }
 
-export default function MessageBubble({
+function MessageBubble({
   isMe,
   text,
   createdAt,
@@ -96,3 +98,5 @@ export default function MessageBubble({
     </div>
   );
 }
+
+export default memo(MessageBubble);

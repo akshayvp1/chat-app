@@ -26,6 +26,17 @@ class GroupRepository implements IGroupRepository {
     return await this.groupModel.findById(groupId).populate("members", "name email");
   }
 
+  async getMemberGroupIds(
+    userId: string,
+    groupIds: string[]
+  ): Promise<string[]> {
+    const groups = await this.groupModel
+      .find({ _id: { $in: groupIds }, members: userId })
+      .select("_id");
+
+    return groups.map((group) => String(group._id));
+  }
+
   async getGroupsForUser(userId: string): Promise<IGroup[]> {
     return await this.groupModel
       .find({ members: userId })
@@ -94,20 +105,38 @@ class GroupRepository implements IGroupRepository {
   async getGroupMessages(groupId: string): Promise<IGroupMessage[]> {
     const messages = await this.groupMessageModel
       .find({ groupId })
-      .populate("senderId", "name email")
-      .sort({ createdAt: 1 });
+      .sort({ createdAt: -1 })
+      .limit(200)
+      .populate("senderId", "name email");
 
     // Attach the same flat senderName here too, so live messages and
     // messages loaded on refresh always have an identically-shaped
     // payload — no more "works after refresh, breaks live" divergence.
-    return messages.map((m) => this.withSenderName(m));
+    return messages.reverse().map((m) => this.withSenderName(m));
   }
 
-  async markGroupMessagesSeen(messageIds: string[], userId: string): Promise<void> {
-    await this.groupMessageModel.updateMany(
-      { _id: { $in: messageIds } },
-      { $addToSet: { seenBy: userId } }
-    );
+  async countGroupMessages(
+    groupId: string,
+    messageIds: string[]
+  ): Promise<number> {
+    return await this.groupMessageModel.countDocuments({
+      _id: { $in: messageIds },
+      groupId,
+    });
+  }
+
+  async markGroupMessagesSeen(
+    messageIds: string[],
+    userId: string,
+    groupId?: string
+  ): Promise<void> {
+    const filter = groupId
+      ? { _id: { $in: messageIds }, groupId }
+      : { _id: { $in: messageIds } };
+
+    await this.groupMessageModel.updateMany(filter, {
+      $addToSet: { seenBy: userId },
+    });
   }
 
   async getUnreadCounts(userId: string): Promise<Record<string, number>> {

@@ -36,6 +36,48 @@ export function useGroupChatSocket({
   const typingTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
     new Map(),
   );
+  const seenQueueRef = useRef<Map<string, Set<string>>>(new Map());
+  const seenFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const flushPendingSeen = useCallback(() => {
+    seenFlushTimerRef.current = null;
+
+    for (const [groupId, messageIds] of seenQueueRef.current) {
+      const queuedIds = [...messageIds].slice(0, 100);
+      if (queuedIds.length > 0) {
+        socket.emit("mark_group_seen", { messageIds: queuedIds, groupId });
+      }
+    }
+
+    seenQueueRef.current.clear();
+  }, []);
+
+  const queueSeen = useCallback(
+    (groupId: string, messageId: string) => {
+      let queuedIds = seenQueueRef.current.get(groupId);
+      if (!queuedIds) {
+        queuedIds = new Set<string>();
+        seenQueueRef.current.set(groupId, queuedIds);
+      }
+      queuedIds.add(messageId);
+
+      if (!seenFlushTimerRef.current) {
+        seenFlushTimerRef.current = setTimeout(flushPendingSeen, 300);
+      }
+    },
+    [flushPendingSeen],
+  );
+
+  useEffect(
+    () => () => {
+      if (seenFlushTimerRef.current) {
+        clearTimeout(seenFlushTimerRef.current);
+        seenFlushTimerRef.current = null;
+      }
+      seenQueueRef.current.clear();
+    },
+    [],
+  );
 
   const clearTypingTimers = useCallback(() => {
     typingTimersRef.current.forEach((timer) => clearTimeout(timer));
@@ -123,10 +165,7 @@ export function useGroupChatSocket({
       dispatch(addGroupMessage({ ...payload, status: "sent" }));
 
       if (payload.senderId !== currentUserId) {
-        socket.emit("mark_group_seen", {
-          messageIds: [payload._id],
-          groupId: payload.groupId,
-        });
+        queueSeen(payload.groupId, payload._id);
       }
 
       dispatch(clearGroupUnread(payload.groupId));
@@ -239,7 +278,14 @@ export function useGroupChatSocket({
       socket.off("group_stop_typing", onGroupStopTyping);
       clearTypingTimers();
     };
-  }, [currentUserId, selectedGroupId, dispatch, clearTypingTimers, clearTypingUsers]);
+  }, [
+    currentUserId,
+    selectedGroupId,
+    dispatch,
+    clearTypingTimers,
+    clearTypingUsers,
+    queueSeen,
+  ]);
 
   const typingUsers =
     typingState.groupId === selectedGroupId

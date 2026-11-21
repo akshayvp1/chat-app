@@ -28,8 +28,27 @@ class ChatService implements IChatService {
     return await this.chatRepository.getMessages(userA, userB);
   }
 
+  async countMessagesForReceiver(
+    senderId: string,
+    receiverId: string,
+    messageIds: string[]
+  ): Promise<number> {
+    return await this.chatRepository.countMessagesForReceiver(
+      senderId,
+      receiverId,
+      messageIds
+    );
+  }
+
   async markSeen(messageIds: string[]): Promise<void> {
     await this.chatRepository.markSeen(messageIds);
+  }
+
+  async markSeenForReceiver(
+    messageIds: string[],
+    receiverId: string
+  ): Promise<void> {
+    await this.chatRepository.markSeenForReceiver(messageIds, receiverId);
   }
 
   async getUnreadCounts(receiverId: string): Promise<Record<string, number>> {

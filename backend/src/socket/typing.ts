@@ -5,6 +5,7 @@ import { getMemberGroup } from "./helpers";
 
 const TYPING_THROTTLE_MS = 800;
 const TYPING_TTL_MS = 2500;
+const GROUP_ACCESS_TTL_MS = 30000;
 
 type EmitTyping = (io: Server) => void;
 type Timer = ReturnType<typeof setTimeout>;
@@ -16,6 +17,32 @@ interface TypingEntry {
 }
 
 const typingBySocket = new Map<string, Map<string, TypingEntry>>();
+const groupAccessBySocket = new Map<
+  string,
+  Map<string, { allowed: boolean; expiresAt: number }>
+>();
+
+async function hasGroupAccess(
+  socket: Socket,
+  userId: string,
+  groupService: GroupService,
+  groupId: string
+): Promise<boolean> {
+  let entries = groupAccessBySocket.get(socket.id);
+  if (!entries) {
+    entries = new Map<string, { allowed: boolean; expiresAt: number }>();
+    groupAccessBySocket.set(socket.id, entries);
+  }
+
+  const now = Date.now();
+  const cached = entries.get(groupId);
+  if (cached && cached.expiresAt > now) return cached.allowed;
+
+  const group = await getMemberGroup(groupService, groupId, userId);
+  const allowed = Boolean(group);
+  entries.set(groupId, { allowed, expiresAt: now + GROUP_ACCESS_TTL_MS });
+  return allowed;
+}
 
 function touchTyping(
   io: Server,
@@ -59,6 +86,7 @@ function stopTyping(socket: Socket, key: string): void {
 }
 
 export function clearSocketTyping(io: Server, socket: Socket): void {
+  groupAccessBySocket.delete(socket.id);
   const entries = typingBySocket.get(socket.id);
   if (!entries) return;
   typingBySocket.delete(socket.id);
@@ -108,8 +136,7 @@ export function registerTypingListeners(
       const body = requireRecord(data, "Group typing payload");
       const groupId = requireObjectId(body.groupId, "group ID");
       const fromName = boundedString(body.fromName, "Display name", 1, 50);
-      const group = await getMemberGroup(groupService, groupId, userId);
-      if (!group) return;
+      if (!(await hasGroupAccess(socket, userId, groupService, groupId))) return;
       const room = `group:${groupId}`;
       touchTyping(
         io,
@@ -127,8 +154,7 @@ export function registerTypingListeners(
     try {
       const body = requireRecord(data, "Group typing payload");
       const groupId = requireObjectId(body.groupId, "group ID");
-      const group = await getMemberGroup(groupService, groupId, userId);
-      if (!group) return;
+      if (!(await hasGroupAccess(socket, userId, groupService, groupId))) return;
       stopTyping(socket, `group:${groupId}`);
       io.to(`group:${groupId}`).except(userId).emit("group_stop_typing", { groupId, from: userId });
     } catch (error) {

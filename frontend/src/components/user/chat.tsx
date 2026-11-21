@@ -1,9 +1,6 @@
-import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppDispatch, useAppSelector } from "../../redux/hooks";
-import { useCall } from "../../hooks/useCall";
-import { preloadRtcConfiguration } from "../../utils/webrtc";
-import { useGroupCall } from "../../hooks/useGroupCall";
+import { useCallContext } from "../../context/callContextValue";
 import { useDirectChatSocket } from "../../hooks/useDirectChatSocket";
 import { useChatSettings } from "../../hooks/useChatSettings";
 import { useMessageComposer } from "../../hooks/useMessageComposer";
@@ -13,9 +10,6 @@ import { clearGroupChat, clearGroupUnread, setSelectedGroup } from "../../redux/
 import chatService from "@/services/user/chatService";
 import { disconnectSocket } from "@/socket/socket";
 import type { UserList } from "../../types/types";
-import CallModal from "./CallModal";
-import GroupCallModal from "./GroupCallModal";
-import MinimizedCallBar from "../MinimizedCallBar";
 import ChatLayout from "./chat/ChatLayout";
 
 export default function Chat() {
@@ -36,49 +30,9 @@ export default function Chat() {
   const unreadByGroup = useAppSelector((s) => s.group.unreadByGroup);
   const groupMessages = useAppSelector((s) => s.group.groupMessages);
 
-  const [historyVersion, setHistoryVersion] = useState(0);
-  const [isGroupCallMinimized, setIsGroupCallMinimized] = useState(false);
+  const historyVersion = useAppSelector((s) => s.chat.callHistoryVersion);
+  const { call, groupCall } = useCallContext();
 
-  useEffect(() => {
-    preloadRtcConfiguration();
-  }, []);
-
-  // ─────────────────────────────────────────────────────────────
-  // 1-to-1 Calling
-  // ─────────────────────────────────────────────────────────────
-
-  const call = useCall({ currentUserId, currentUserName, onCallEnded: () => setHistoryVersion((v) => v + 1) });
-
-  // ─────────────────────────────────────────────────────────────
-  // Group Calling
-  // IMPORTANT:
-  // This hook is at Chat level, NOT inside GroupChat.
-  //
-  // Therefore switching between chats/groups does not destroy
-  // the active group WebRTC call.
-  // ─────────────────────────────────────────────────────────────
-
-  const groupCall = useGroupCall({
-    currentUserId,
-    currentUserName,
-    onCallEnded: () => {
-      setIsGroupCallMinimized(false);
-      setHistoryVersion((v) => v + 1);
-    },
-  });
-
-  // ─────────────────────────────────────────────────────────────
-  // IMPORTANT:
-  //
-  // Do NOT use selectedGroup here.
-  //
-  // If the user is in Group A call and switches to Group B,
-  // selectedGroup becomes Group B.
-  //
-  // We need the group belonging to the active call.
-  // ─────────────────────────────────────────────────────────────
-
-  const activeCallGroup = groups.find((g) => g._id === groupCall.groupId);
   const composer = useMessageComposer({
     target: { kind: "direct", receiverId: selectedContactId, ready: !!selectedContact },
     currentUserId,
@@ -168,88 +122,6 @@ export default function Chat() {
         onStartVideoCall={handleStartVideoCall}
         onLogout={handleLogout}
       />
-
-      {/* ─────────────────────────────────────────────────────────
-          1-to-1 Call modal
-          
-          Existing implementation preserved.
-      ───────────────────────────────────────────────────────── */}
-
-      <CallModal
-        status={call.status}
-        callType={call.callType}
-        peerName={call.peer?.name ?? call.incomingCall?.fromName}
-        localStream={call.localStream}
-        remoteStream={call.remoteStream}
-        isMuted={call.isMuted}
-        isCameraOff={call.isCameraOff}
-        onAccept={call.acceptCall}
-        onReject={call.rejectCall}
-        onEnd={call.endCall}
-        onToggleMute={call.toggleMute}
-        onToggleCamera={call.toggleCamera}
-      />
-
-      {/* ─────────────────────────────────────────────────────────
-          GROUP CALL MODAL
-          
-          This is deliberately rendered at Chat root rather than
-          inside GroupChat.
-          
-          That means:
-          
-          Group A selected
-              ↓
-          Start group call
-              ↓
-          Switch to Group B
-              ↓
-          Group call CONTINUES
-      ───────────────────────────────────────────────────────── */}
-
-      {groupCall.status !== "idle" && !isGroupCallMinimized && (
-        <GroupCallModal
-          status={groupCall.status}
-          callType={groupCall.callType}
-          groupName={activeCallGroup?.name}
-          incomingFromName={groupCall.incomingCall?.fromName}
-          localStream={groupCall.localStream}
-          participants={groupCall.participants}
-          isMuted={groupCall.isMuted}
-          isCameraOff={groupCall.isCameraOff}
-          onAccept={groupCall.acceptCall}
-          onDecline={groupCall.declineCall}
-          onLeave={groupCall.leaveCall}
-          onToggleMute={groupCall.toggleMute}
-          onToggleCamera={groupCall.toggleCamera}
-          onMinimize={() => setIsGroupCallMinimized(true)}
-        />
-      )}
-
-      {/* ─────────────────────────────────────────────────────────
-          MINIMIZED GROUP CALL BAR
-          
-          Only shown when:
-          
-          1. User clicked minimize
-          2. Call is connecting OR in-call
-          
-          Incoming/other terminal states stay in the modal so
-          accept/decline/end controls remain available.
-      ───────────────────────────────────────────────────────── */}
-
-      {isGroupCallMinimized &&
-        (groupCall.status === "connecting" ||
-          groupCall.status === "in-call") && (
-          <MinimizedCallBar
-            title={activeCallGroup?.name ?? "Group call"}
-            isVideo={groupCall.callType === "video"}
-            isConnecting={groupCall.status === "connecting"}
-            startedAt={groupCall.startedAt}
-            onExpand={() => setIsGroupCallMinimized(false)}
-            onEnd={groupCall.leaveCall}
-          />
-        )}
     </div>
   );
 }

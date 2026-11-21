@@ -1,5 +1,5 @@
 import { useCallback, useRef } from "react";
-import type { RefObject } from "react";
+import type { Dispatch, RefObject, SetStateAction } from "react";
 import type {
   CallStatus,
   CallType,
@@ -43,6 +43,7 @@ export interface UseDirectCallMediaParams extends MediaRefs {
   setIncomingCall: (call: IncomingCall | null) => void;
   setLocalStream: (stream: MediaStream | null) => void;
   setRemoteStream: (stream: MediaStream | null) => void;
+  setStartedAt: Dispatch<SetStateAction<number | null>>;
   setIsMuted: (muted: boolean) => void;
   setIsCameraOff: (off: boolean) => void;
   emitCandidate: EmitCandidate;
@@ -71,7 +72,7 @@ export function useDirectCallMedia({
   onCallEndedRef, setStatus,
   setCallType, setPeer,
   setIncomingCall, setLocalStream,
-  setRemoteStream, setIsMuted,
+  setRemoteStream, setStartedAt, setIsMuted,
   setIsCameraOff, emitCandidate,
   emitConnected, emitNetworkFailure, emitOffer,
 }: UseDirectCallMediaParams): DirectCallMedia {
@@ -84,7 +85,21 @@ export function useDirectCallMedia({
   const updateStatus = useCallback((next: CallStatus) => {
     statusRef.current = next;
     setStatus(next);
-  }, [statusRef, setStatus]);
+
+    const now = Date.now();
+    if (next === "calling" || next === "ringing") {
+      setStartedAt(now);
+    } else if (next === "connecting") {
+      setStartedAt((current) => current ?? now);
+    } else if (
+      next === "idle" ||
+      next === "rejected" ||
+      next === "ended" ||
+      next === "missed"
+    ) {
+      setStartedAt(null);
+    }
+  }, [setStartedAt, setStatus, statusRef]);
 
   const clearCallTimers = useCallback(() => {
     if (terminalTimerRef.current) clearTimeout(terminalTimerRef.current);

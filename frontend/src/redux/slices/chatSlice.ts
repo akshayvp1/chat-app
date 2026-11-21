@@ -16,6 +16,7 @@ interface ChatState {
   selectedContact: UserList | null;
   messages: ChatMessage[];
   unreadByContact: Record<string, number>;
+  callHistoryVersion: number;
 }
 
 const initialState: ChatState = {
@@ -23,6 +24,7 @@ const initialState: ChatState = {
   selectedContact: null,
   messages: [],
   unreadByContact: {},
+  callHistoryVersion: 0,
 };
 
 const chatSlice = createSlice({
@@ -114,6 +116,10 @@ const chatSlice = createSlice({
       delete state.unreadByContact[action.payload];
     },
 
+    incrementCallHistoryVersion: (state) => {
+      state.callHistoryVersion += 1;
+    },
+
     // was: clearChatState
     clearChat: (state) => {
       state.selectedContact = null;
@@ -136,6 +142,7 @@ export const {
   incrementContactUnread,
   setContactUnreadCount,
   clearContactUnread,
+  incrementCallHistoryVersion,
   clearChat,
 } = chatSlice.actions;
 

@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Phone, Video } from "lucide-react";
 
 import { BRAND_COLOR } from "../../../constants/brand";
@@ -52,7 +53,7 @@ function isMissedCall(call: CallInfo | GroupCallInfo, variant: "direct" | "group
     : (call as GroupCallInfo).status === "missed";
 }
 
-export default function CallLogBubble({
+function CallLogBubble({
   call,
   createdAt,
   variant,
@@ -97,3 +98,5 @@ export default function CallLogBubble({
     </div>
   );
 }
+
+export default memo(CallLogBubble);

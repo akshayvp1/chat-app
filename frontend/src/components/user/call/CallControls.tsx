@@ -1,4 +1,13 @@
-import { Mic, MicOff, PhoneOff, Video, VideoOff } from "lucide-react";
+import {
+  Camera,
+  Mic,
+  MicOff,
+  Minimize2,
+  PhoneOff,
+  RefreshCw,
+  Video,
+  VideoOff,
+} from "lucide-react";
 
 interface CallControlsProps {
   isMuted: boolean;
@@ -8,11 +17,17 @@ interface CallControlsProps {
   onToggleCamera: () => void;
   onEnd: () => void;
   variant?: "overlay" | "panel";
+  onSwitchCamera?: () => void;
+  onSwapViews?: () => void;
+  onMinimize?: () => void;
+  showCameraSwitch?: boolean;
+  showSwapViews?: boolean;
 }
 
 const STYLES = {
   overlay: {
-    container: "absolute bottom-4 flex gap-3 sm:bottom-6 sm:gap-4",
+    container:
+      "absolute bottom-[max(1rem,env(safe-area-inset-bottom))] flex max-w-[calc(100%-1rem)] items-center justify-center gap-2 rounded-2xl bg-black/25 px-2 py-2 backdrop-blur-sm sm:bottom-6 sm:gap-3",
     toggle:
       "flex h-11 w-11 items-center justify-center rounded-full bg-white/15 transition-colors hover:bg-white/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:h-12 sm:w-12",
     end: "flex h-12 w-12 items-center justify-center rounded-full bg-red-500 transition-colors hover:bg-red-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white",
@@ -37,6 +52,11 @@ export default function CallControls({
   onToggleCamera,
   onEnd,
   variant = "overlay",
+  onSwitchCamera,
+  onSwapViews,
+  onMinimize,
+  showCameraSwitch = false,
+  showSwapViews = false,
 }: CallControlsProps) {
   const styles = STYLES[variant];
   const muteLabel = isMuted ? "Unmute" : "Mute";
@@ -68,6 +88,39 @@ export default function CallControls({
           ) : (
             <Video className="h-5 w-5" />
           )}
+        </button>
+      )}
+      {showCamera && showCameraSwitch && onSwitchCamera && (
+        <button
+          type="button"
+          onClick={onSwitchCamera}
+          className={styles.toggle}
+          title="Switch camera"
+          aria-label="Switch camera"
+        >
+          <Camera className="h-5 w-5" />
+        </button>
+      )}
+      {showSwapViews && onSwapViews && (
+        <button
+          type="button"
+          onClick={onSwapViews}
+          className={styles.toggle}
+          title="Swap video views"
+          aria-label="Swap video views"
+        >
+          <RefreshCw className="h-5 w-5" />
+        </button>
+      )}
+      {onMinimize && (
+        <button
+          type="button"
+          onClick={onMinimize}
+          className={styles.toggle}
+          title="Minimize call"
+          aria-label="Minimize call"
+        >
+          <Minimize2 className="h-5 w-5" />
         </button>
       )}
       <button

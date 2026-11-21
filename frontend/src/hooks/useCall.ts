@@ -28,10 +28,13 @@ export function useCall({
   const [incomingCall, setIncomingCall] = useState<IncomingCall | null>(null);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
+  const [startedAt, setStartedAt] = useState<number | null>(null);
   const [isMuted, setIsMuted] = useState(false);
   const [isCameraOff, setIsCameraOff] = useState(false);
+  const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
 
   const pcRef = useRef<RTCPeerConnection | null>(null);
+  const facingModeRef = useRef<"user" | "environment">("user");
   const localStreamRef = useRef<MediaStream | null>(null);
   const mediaPromiseRef = useRef<Promise<MediaStream> | null>(null);
   const mediaRequestIdRef = useRef(0);
@@ -108,6 +111,7 @@ export function useCall({
     setIncomingCall,
     setLocalStream,
     setRemoteStream,
+    setStartedAt,
     setIsMuted,
     setIsCameraOff,
     emitCandidate,
@@ -197,6 +201,60 @@ export function useCall({
     });
   }, []);
 
+  const switchCamera = useCallback(async () => {
+    if (callTypeRef.current !== "video") return;
+
+    const nextFacingMode =
+      facingModeRef.current === "user" ? "environment" : "user";
+    const currentStream = localStreamRef.current;
+    const currentTrack = currentStream?.getVideoTracks()[0];
+
+    if (!currentStream || !currentTrack) {
+      facingModeRef.current = nextFacingMode;
+      setFacingMode(nextFacingMode);
+      return;
+    }
+
+    try {
+      await currentTrack.applyConstraints({
+        facingMode: { ideal: nextFacingMode },
+      });
+    } catch {
+      let fallbackStream: MediaStream | null = null;
+      try {
+        fallbackStream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: { facingMode: { ideal: nextFacingMode } },
+        });
+        const nextStream = fallbackStream;
+        const nextTrack = nextStream.getVideoTracks()[0];
+
+        if (!nextTrack) {
+          nextStream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+
+        nextTrack.enabled = currentTrack.enabled;
+        const sender = pcRef.current
+          ?.getSenders()
+          .find((candidate) => candidate.track?.kind === "video");
+        if (sender) await sender.replaceTrack(nextTrack);
+
+        currentStream.removeTrack(currentTrack);
+        currentStream.addTrack(nextTrack);
+        currentTrack.stop();
+        setLocalStream(new MediaStream(currentStream.getTracks()));
+      } catch (error) {
+        fallbackStream?.getTracks().forEach((track) => track.stop());
+        console.warn("Camera switch failed", error);
+        return;
+      }
+    }
+
+    facingModeRef.current = nextFacingMode;
+    setFacingMode(nextFacingMode);
+  }, [callTypeRef, localStreamRef, pcRef, setLocalStream]);
+
   const { startCall, rejectCall, endCall } = useCallSignaling({
     currentUserId,
     currentUserName,
@@ -223,13 +281,16 @@ export function useCall({
     incomingCall,
     localStream,
     remoteStream,
+    startedAt,
     isMuted,
     isCameraOff,
+    facingMode,
     startCall,
     acceptCall,
     rejectCall,
     endCall,
     toggleMute,
     toggleCamera,
+    switchCamera,
   };
 }

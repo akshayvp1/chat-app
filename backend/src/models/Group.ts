@@ -12,4 +12,6 @@ const GroupSchema = new Schema<IGroup>(
   { timestamps: true }
 );
 
+GroupSchema.index({ members: 1 });
+
 export default mongoose.model<IGroup>("Group", GroupSchema);

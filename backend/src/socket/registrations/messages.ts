@@ -39,10 +39,12 @@ export function registerMessageListeners(
   socket.on("join_groups", async (groupIds: unknown) => {
     try {
       const groupIdsToJoin = requireObjectIds(groupIds, "group IDs", 50);
+      const memberGroupIds = new Set(
+        await groupService.getMemberGroupIds(userId, groupIdsToJoin)
+      );
 
       for (const groupId of groupIdsToJoin) {
-        const group = await getMemberGroup(groupService, groupId, userId);
-        if (group) {
+        if (memberGroupIds.has(groupId)) {
           socket.join(`group:${groupId}`);
         }
       }
@@ -104,17 +106,18 @@ export function registerMessageListeners(
 
       if (senderId === userId) return;
 
-      const conversation = await chatService.getMessages(userId, senderId);
-      const conversationIds = new Set(
-        conversation
-          .filter((message) => String(message.receiverId) === userId)
-          .map((message) => String(message._id)),
+      const uniqueMessageIds = [...new Set(messageIds)];
+      if (uniqueMessageIds.length === 0) return;
+
+      const matchedCount = await chatService.countMessagesForReceiver(
+        senderId,
+        userId,
+        uniqueMessageIds,
       );
+      if (matchedCount !== uniqueMessageIds.length) return;
 
-      if (!messageIds.every((id) => conversationIds.has(id))) return;
-
-      await chatService.markSeen(messageIds);
-      io.to(senderId).emit("messages_seen", { messageIds });
+      await chatService.markSeenForReceiver(uniqueMessageIds, userId);
+      io.to(senderId).emit("messages_seen", { messageIds: uniqueMessageIds });
     } catch (error) {
       console.error("mark_seen error:", error);
     }
@@ -176,14 +179,18 @@ export function registerMessageListeners(
 
       if (!group) return;
 
-      const groupMessages = await groupService.getGroupMessages(groupId);
-      const groupMessageIds = new Set(groupMessages.map((message) => String(message._id)));
+      const uniqueMessageIds = [...new Set(messageIds)];
+      if (uniqueMessageIds.length === 0) return;
 
-      if (!messageIds.every((id) => groupMessageIds.has(id))) return;
+      const matchedCount = await groupService.countGroupMessages(
+        groupId,
+        uniqueMessageIds,
+      );
+      if (matchedCount !== uniqueMessageIds.length) return;
 
-      await groupService.markGroupMessagesSeen(messageIds, userId);
+      await groupService.markGroupMessagesSeen(uniqueMessageIds, userId, groupId);
       io.to(`group:${groupId}`).except(userId).emit("group_messages_seen", {
-        messageIds,
+        messageIds: uniqueMessageIds,
         seenBy: userId,
       });
     } catch (error) {

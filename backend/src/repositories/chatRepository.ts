@@ -36,19 +36,44 @@ class ChatRepository implements IChatRepository {
   }
 
   async getMessages(userA: string, userB: string): Promise<IMessage[]> {
-    return await this.messageModel
+    const messages = await this.messageModel
       .find({
         $or: [
           { senderId: userA, receiverId: userB },
           { senderId: userB, receiverId: userA },
         ],
       })
-      .sort({ createdAt: 1 });
+      .sort({ createdAt: -1 })
+      .limit(200);
+
+    return messages.reverse();
+  }
+
+  async countMessagesForReceiver(
+    senderId: string,
+    receiverId: string,
+    messageIds: string[]
+  ): Promise<number> {
+    return await this.messageModel.countDocuments({
+      _id: { $in: messageIds },
+      senderId,
+      receiverId,
+    });
   }
 
   async markSeen(messageIds: string[]): Promise<void> {
     await this.messageModel.updateMany(
       { _id: { $in: messageIds } },
+      { seen: true }
+    );
+  }
+
+  async markSeenForReceiver(
+    messageIds: string[],
+    receiverId: string
+  ): Promise<void> {
+    await this.messageModel.updateMany(
+      { _id: { $in: messageIds }, receiverId },
       { seen: true }
     );
   }

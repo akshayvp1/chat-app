@@ -35,4 +35,7 @@ const GroupMessageSchema = new Schema<IGroupMessage>(
   { timestamps: true }
 );
 
+GroupMessageSchema.index({ groupId: 1, createdAt: -1 });
+GroupMessageSchema.index({ groupId: 1, seenBy: 1 });
+
 export default mongoose.model<IGroupMessage>("GroupMessage", GroupMessageSchema);
