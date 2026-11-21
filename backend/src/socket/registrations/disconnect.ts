@@ -3,7 +3,13 @@ import redisClient from "../../config/redis";
 import GroupCallService from "../../services/groupCallService";
 import { directCallOwnerKey, getCallParticipants } from "../helpers";
 import { leavePresence } from "../presence";
-import { clearRingingTimer, DirectCallStatus } from "../state";
+import {
+  clearDirectDisconnectTimer,
+  clearRingingTimer,
+  DIRECT_DISCONNECT_GRACE_MS,
+  DirectCallStatus,
+  setDirectDisconnectTimer,
+} from "../state";
 import { clearSocketTyping } from "../typing";
 
 export type FinalizeCall = (
@@ -29,33 +35,54 @@ async function cleanupDirectCall(
   socket: Socket,
   userId: string,
   finalizeCall: FinalizeCall,
-): Promise<void> {
+): Promise<boolean> {
   try {
     const activeCallId = await redisClient.get(`activecall:${userId}`);
-    if (!activeCallId) return;
+    if (!activeCallId) return false;
 
     const participants = await getCallParticipants(activeCallId);
-    if (!participants) return;
+    if (!participants) return false;
 
     const role = userId === participants.caller ? "caller" : "receiver";
     const owner = await redisClient.get(directCallOwnerKey(activeCallId, role));
-    if (owner && owner !== socket.id) return;
+    if (owner && owner !== socket.id) return false;
 
     clearRingingTimer(activeCallId);
     const wasConnected = await redisClient.get(`callready:${activeCallId}`);
-    const finalStatus: DirectCallStatus = wasConnected ? "completed" : "missed";
     const storedType = await redisClient.get(`call:${activeCallId}:type`);
     const callType = storedType === "video" ? "video" : "audio";
     const counterpart = role === "caller" ? participants.receiver : participants.caller;
+    const key = `${activeCallId}:${userId}`;
 
-    await finalizeCall(activeCallId, finalStatus, socket.id, userId);
-    io.to(counterpart).emit("call:ended", {
-      callId: activeCallId,
-      from: userId,
-      callType,
-    });
+    const finish = async () => {
+      clearDirectDisconnectTimer(key);
+      const currentOwner = await redisClient.get(directCallOwnerKey(activeCallId, role));
+      if (currentOwner && io.sockets.sockets.get(currentOwner)) return;
+      const finalStatus: DirectCallStatus = wasConnected ? "completed" : "missed";
+      await finalizeCall(activeCallId, finalStatus, socket.id, userId);
+      io.to(counterpart).emit("call:ended", {
+        callId: activeCallId,
+        from: userId,
+        callType,
+      });
+      await clearActiveCall(userId);
+    };
+
+    if (wasConnected) {
+      const timer = setTimeout(() => {
+        void finish().catch((error) => {
+          console.error("disconnect call grace error:", error);
+        });
+      }, DIRECT_DISCONNECT_GRACE_MS);
+      setDirectDisconnectTimer(key, timer);
+      return true;
+    }
+
+    await finish();
+    return false;
   } catch (error) {
     console.error("disconnect call cleanup error:", error);
+    return false;
   }
 }
 
@@ -112,8 +139,8 @@ export function registerDisconnectCleanup(
     const wasLastSocket = await leavePresence(io, userId, socket.id);
     if (!wasLastSocket) return;
 
-    await cleanupDirectCall(io, socket, userId, finalizeCall);
+    const directGrace = await cleanupDirectCall(io, socket, userId, finalizeCall);
     await cleanupGroupCall(io, userId, groupCallService, finalizeGroupCall);
-    await clearActiveCall(userId);
+    if (!directGrace) await clearActiveCall(userId);
   });
 }

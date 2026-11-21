@@ -77,6 +77,18 @@ export function useCall({
     [currentUserId]
   );
 
+  const emitOffer = useCallback(
+    (callId: string, to: string, offer: RTCSessionDescriptionInit, callType: CallType | null) =>
+      socket.emit("call:offer", {
+        callId,
+        to,
+        from: currentUserId,
+        callType,
+        offer: { type: offer.type, sdp: offer.sdp },
+      }),
+    [currentUserId]
+  );
+
   const media = useDirectCallMedia({
     pcRef,
     localStreamRef,
@@ -101,6 +113,7 @@ export function useCall({
     emitCandidate,
     emitConnected,
     emitNetworkFailure,
+    emitOffer,
   });
 
   const { disposeMedia, finishCall } = media;
@@ -133,20 +146,12 @@ export function useCall({
       }
     };
 
-    const onDisconnect = () => {
-      if (callIdRef.current && statusRef.current !== "idle") {
-        finishCall("ended");
-      }
-    };
-
     socket.on("connect", onConnect);
-    socket.on("disconnect", onDisconnect);
 
     return () => {
       socket.off("connect", onConnect);
-      socket.off("disconnect", onDisconnect);
     };
-  }, [currentUserId, finishCall]);
+  }, [currentUserId]);
 
   const acceptCall = useCallback(async () => {
     if (!incomingCall || statusRef.current !== "ringing") return;

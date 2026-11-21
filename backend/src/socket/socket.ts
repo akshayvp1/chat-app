@@ -9,7 +9,7 @@ import {
 } from "./registrations/groupCalls";
 import { registerMessageListeners } from "./registrations/messages";
 import { joinPresence } from "./presence";
-import { DirectCallStatus } from "./state";
+import { clearUserDirectDisconnectTimers, DirectCallStatus } from "./state";
 import { registerTypingListeners } from "./typing";
 
 export const initializeSocket = (io: Server) => {
@@ -22,6 +22,7 @@ export const initializeSocket = (io: Server) => {
 
     console.log(`✅ User connected: ${userId} (socket: ${socket.id})`);
 
+    clearUserDirectDisconnectTimers(userId);
     socket.join(userId);
 
     /* ════════════════════════════════════════════════════════════════

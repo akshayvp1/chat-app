@@ -36,7 +36,7 @@ export default function CallModal({
   const remoteAudioRef = useStreamRef<HTMLAudioElement>(remoteStream);
 
   const remoteHasVideo = useHasLiveVideo(remoteStream);
-  const localHasVideo = useHasLiveVideo(localStream);
+  const localHasVideo = useHasLiveVideo(localStream, true);
 
   if (status === "idle") return null;
 
@@ -126,7 +126,7 @@ export default function CallModal({
                     {initials}
                   </div>
                   <p className="text-sm text-[#C9BFFF]">
-                    {remoteStream ? "Camera is off" : "Connecting video..."}
+                    {remoteStream ? "Waiting for video..." : "Connecting video..."}
                   </p>
                 </div>
               )}

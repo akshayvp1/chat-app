@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 
 /** True while the stream actually carries a playable video track. */
-export function streamHasLiveVideo(stream: MediaStream | null): boolean {
+export function streamHasLiveVideo(stream: MediaStream | null, local = false): boolean {
   if (!stream) return false;
-  return stream
-    .getVideoTracks()
-    .some((track) => track.readyState === "live" && track.enabled && !track.muted);
+  return stream.getVideoTracks().some((track) => {
+    if (track.readyState !== "live") return false;
+    return !local || (track.enabled && !track.muted);
+  });
 }
 
 /**
@@ -14,7 +15,7 @@ export function streamHasLiveVideo(stream: MediaStream | null): boolean {
  * either way so audio keeps playing, and overlay an avatar when there is
  * nothing to show. Detaching the element would silence the peer.
  */
-export function useHasLiveVideo(stream: MediaStream | null) {
+export function useHasLiveVideo(stream: MediaStream | null, local = false) {
   const [, forceUpdate] = useState(0);
 
   useEffect(() => {
@@ -43,5 +44,5 @@ export function useHasLiveVideo(stream: MediaStream | null) {
     };
   }, [stream]);
 
-  return streamHasLiveVideo(stream);
+  return streamHasLiveVideo(stream, local);
 }

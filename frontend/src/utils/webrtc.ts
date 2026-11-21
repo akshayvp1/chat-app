@@ -19,7 +19,12 @@ export type { PeerConnectionHandlers } from "./peerConnection";
 export { createGroupPeerConnection } from "./webrtcGroup";
 export type { GroupPeerConnectionOptions } from "./webrtcGroup";
 export { closePeerConnection, disposeMedia, getLocalMedia, stopLocalTracks } from "./webrtcMedia";
-export { getRtcConfiguration, preloadRtcConfiguration } from "./rtcConfig";
+export {
+  getRtcConfiguration,
+  getRtcDiagnostics,
+  hasTurnServer,
+  preloadRtcConfiguration,
+} from "./rtcConfig";
 export type { ConnectionRefs, MediaRefs } from "./webrtcMedia";
 
 export interface UseDirectCallMediaParams extends MediaRefs {
@@ -43,6 +48,7 @@ export interface UseDirectCallMediaParams extends MediaRefs {
   emitCandidate: EmitCandidate;
   emitConnected: (callId: string, to: string) => void;
   emitNetworkFailure: (callId: string, to: string) => void;
+  emitOffer: (callId: string, to: string, offer: RTCSessionDescriptionInit, callType: CallType | null) => void;
 }
 
 export interface DirectCallMedia {
@@ -67,11 +73,13 @@ export function useDirectCallMedia({
   setIncomingCall, setLocalStream,
   setRemoteStream, setIsMuted,
   setIsCameraOff, emitCandidate,
-  emitConnected, emitNetworkFailure,
+  emitConnected, emitNetworkFailure, emitOffer,
 }: UseDirectCallMediaParams): DirectCallMedia {
   const terminalTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const networkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const connectedNotifiedRef = useRef(false);
+  const iceRestartAttemptsRef = useRef(0);
+  const lastIceRestartRef = useRef(0);
 
   const updateStatus = useCallback((next: CallStatus) => {
     statusRef.current = next;
@@ -95,6 +103,8 @@ export function useDirectCallMedia({
     isCallerRef.current = false;
     pendingCandidatesRef.current = [];
     connectedNotifiedRef.current = false;
+    iceRestartAttemptsRef.current = 0;
+    lastIceRestartRef.current = 0;
   }, [
     callIdRef,
     callTypeRef,
@@ -147,6 +157,7 @@ export function useDirectCallMedia({
   const markConnected = useCallback(() => {
     if (connectedNotifiedRef.current) return;
     connectedNotifiedRef.current = true;
+    iceRestartAttemptsRef.current = 0;
     if (networkTimerRef.current) {
       clearTimeout(networkTimerRef.current);
       networkTimerRef.current = null;
@@ -172,6 +183,28 @@ export function useDirectCallMedia({
         finishCall("ended");
       };
 
+      const restartIce = async (): Promise<boolean> => {
+        const pc = pcRef.current;
+        const callId = callIdRef.current;
+        const target = peerRef.current;
+        if (!isCallerRef.current || !pc || !callId || !target) return false;
+        if (pc.signalingState !== "stable" || iceRestartAttemptsRef.current >= 2) return false;
+        if (Date.now() - lastIceRestartRef.current < 8000) return false;
+        iceRestartAttemptsRef.current += 1;
+        lastIceRestartRef.current = Date.now();
+        try {
+          (pc as RTCPeerConnection & { restartIce?: () => void }).restartIce?.();
+          const offer = await pc.createOffer({ iceRestart: true });
+          await pc.setLocalDescription(offer);
+          if (callIdRef.current !== callId) return false;
+          emitOffer(callId, target.id, { type: offer.type, sdp: offer.sdp }, callTypeRef.current);
+          return true;
+        } catch (error) {
+          console.warn("ICE restart failed", error);
+          return false;
+        }
+      };
+
       const pc = createPeerConnection({
         onCandidate: (candidate) => emitCandidate(currentCallId, to, candidate),
         onTrack: (event) => {
@@ -185,11 +218,20 @@ export function useDirectCallMedia({
         onConnectionChange: (state) => {
           if (state === "connected") {
             markConnected();
-          } else if (state === "failed" || state === "closed") {
+          } else if (state === "failed") {
+            void restartIce().then((restarted) => {
+              if (!restarted) fail();
+              else networkTimerRef.current = setTimeout(fail, 15000);
+            });
+          } else if (state === "closed") {
             fail();
           } else if (state === "disconnected") {
             if (networkTimerRef.current) clearTimeout(networkTimerRef.current);
-            networkTimerRef.current = setTimeout(fail, 6000);
+            networkTimerRef.current = setTimeout(() => {
+              void restartIce().then(() => {
+                networkTimerRef.current = setTimeout(fail, 15000);
+              });
+            }, 5000);
           }
         },
       });
@@ -198,9 +240,12 @@ export function useDirectCallMedia({
     },
     [
       callIdRef,
+      callTypeRef,
       emitCandidate,
       emitNetworkFailure,
+      emitOffer,
       finishCall,
+      isCallerRef,
       markConnected,
       pcRef,
       peerRef,

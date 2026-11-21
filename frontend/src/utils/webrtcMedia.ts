@@ -54,12 +54,10 @@ export function getLocalMedia(
           video: type === "video",
         });
       } catch (error) {
-        if (type !== "video") throw error;
-        try {
-          stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-        } catch {
-          throw error;
+        if (type === "video") {
+          throw new Error("Camera access is required for a video call", { cause: error });
         }
+        throw error;
       }
     }
 

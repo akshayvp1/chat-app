@@ -13,6 +13,26 @@ export function getCurrentRtcConfiguration(): RTCConfiguration {
   return currentConfiguration;
 }
 
+export function hasTurnServer(config: RTCConfiguration = currentConfiguration): boolean {
+  return (config.iceServers ?? []).some((server) => {
+    const urls = typeof server.urls === "string" ? [server.urls] : server.urls;
+    return urls.some((url) => url.startsWith("turn:") || url.startsWith("turns:"));
+  });
+}
+
+export function getRtcDiagnostics(): {
+  hasTurn: boolean;
+  iceServers: Array<{ urls: string | string[]; hasCredentials: boolean }>;
+} {
+  return {
+    hasTurn: hasTurnServer(),
+    iceServers: (currentConfiguration.iceServers ?? []).map((server) => ({
+      urls: server.urls,
+      hasCredentials: Boolean(server.username && server.credential),
+    })),
+  };
+}
+
 export function getRtcConfiguration(force = false): Promise<RTCConfiguration> {
   if (pendingConfiguration) return pendingConfiguration;
   if (!force && fetchedAt && Date.now() - fetchedAt < CONFIG_TTL_MS) {
@@ -27,8 +47,8 @@ export function getRtcConfiguration(force = false): Promise<RTCConfiguration> {
       fetchedAt = Date.now();
       return currentConfiguration;
     })
-    .catch(() => {
-      fetchedAt = Date.now();
+    .catch((error) => {
+      console.warn("RTC configuration fetch failed; using cached configuration", error);
       return currentConfiguration;
     })
     .finally(() => {
